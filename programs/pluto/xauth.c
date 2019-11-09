@@ -43,7 +43,7 @@ struct xauth {
 	xauth_callback_t *callback;
 	bool abort;
 	pid_t child;
-	pam_handle_t *ptr_pam_ptr;
+	void *ptr_pam_ptr;
 };
 
 static void pfree_xauth(struct xauth *x)

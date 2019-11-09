@@ -193,7 +193,7 @@ bool do_pam_authentication(struct pam_thread_arg *arg)
          * but don't close the handle. only close the handle when the connection is closed.
          * or we have a pam error.
          * */
-        arg->ptr_pam_ptr = pamh;
+        arg->ptr_pam_ptr = (void*) pamh;
 	return TRUE;
 	} while (FALSE);
 
@@ -212,30 +212,30 @@ bool do_pam_authentication(struct pam_thread_arg *arg)
 bool impl_pam_close_session(void *pamh)
 {
   int retval;
-
+  pam_handle_t *pam_handle = (pam_handle_t*)pamh;
   /* This do-while structure is designed to allow a logical cascade
    * without excessive indentation.  No actual looping happens.
    * Failure is handled by "break".
    */
   do {
 
-    retval = pam_close_session(pamh, 0);
+    retval = pam_close_session(pam_handle, 0);
     if (retval != PAM_SUCCESS) {
-      pam_end(pamh, retval);
+      pam_end(pam_handle, retval);
       break;
     }
     //log_pam_step(arg, what);
     DBG(DBG_XAUTH, DBG_log("pam_end_session called"));
 
     /* great success! */
-    pam_end(pamh, retval);
-    pamh = NULL;
+    pam_end(pam_handle, retval);
+    pam_handle = NULL;
     return TRUE;
   } while (FALSE);
 
   /* common failure code */
   libreswan_log("FAILED during pam_end_session -> with '%s' for state ", pam_strerror(pamh, retval));
-  pam_end(pamh, retval);
-  pamh = NULL;
+  pam_end(pam_handle, retval);
+  pam_handle = NULL;
   return FALSE;
 }
