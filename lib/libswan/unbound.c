@@ -32,7 +32,8 @@
 #include <glob.h>
 #include <event2/event.h>
 #include <unbound.h>	/* from unbound devel */
-#include <unbound-event.h> /* from unbound devel */
+//#include <unbound-event.h> /* from unbound devel */
+#include "../../include/unbound/unbound-event.h"
 
 #include "dnssec.h"
 #include "constants.h"

@@ -245,7 +245,7 @@ static bool verify_end_cert(CERTCertList *trustcl,
 
 	static const struct usage_desc usages[] = {
 #ifdef NSS_IPSEC_PROFILE
-		{ certificateUsageIPsec, "IPsec" },
+//		{ certificateUsageIPsec, "IPsec" },
 #endif
 		{ certificateUsageSSLClient, "TLS Client" },
 		{ certificateUsageSSLServer, "TLS Server" }

@@ -244,7 +244,7 @@ NSPR_LDFLAGS ?= -lnspr4
 # Use local copy of nss function CERT_CompareAVA
 # See https://bugzilla.mozilla.org/show_bug.cgi?id=1336487
 # This work-around is needed with nss versions before 3.30.
-USE_NSS_AVA_COPY?=false
+USE_NSS_AVA_COPY?=true
 ifeq ($(USE_NSS_AVA_COPY),true)
 NSSFLAGS += -DNSS_REQ_AVA_COPY
 endif

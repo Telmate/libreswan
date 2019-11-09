@@ -16,6 +16,7 @@
  */
 
 #ifdef XAUTH_HAVE_PAM
+#include <security/pam_appl.h>
 struct pam_thread_arg {
 	char *name;
 	char *password;
@@ -24,7 +25,7 @@ struct pam_thread_arg {
 	so_serial_t st_serialno;
 	unsigned long c_instance_serial;
 	const char *atype;  /* string XAUTH or IKEv2 */
-
+	pam_handle_t *ptr_pam_ptr;
 };
 
 extern bool do_pam_authentication(struct pam_thread_arg *arg);

@@ -25,7 +25,8 @@
 #include <arpa/nameser.h>
 #include <ldns/ldns.h>	/* from ldns-devel */
 #include <ldns/rr.h>
-#include "unbound-event.h"
+//#include "unbound-event.h"
+#include "../../include/unbound/unbound-event.h"
 #include "lswlog.h"
 #include "defs.h"
 #include "log.h"

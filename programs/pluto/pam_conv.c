@@ -180,7 +180,7 @@ bool do_pam_authentication(struct pam_thread_arg *arg)
         }
 		log_pam_step(arg, what);
 
-        what = "pam_open_session"
+        what = "pam_open_session";
         retval = pam_open_session(pamh, 0); /* permitted access? */
         if (retval != PAM_SUCCESS) {
           pam_end(pamh, retval);
@@ -193,7 +193,7 @@ bool do_pam_authentication(struct pam_thread_arg *arg)
 		 * but don't close the handle. only close the handle when the connection is closed.
 		 * or we have a pam error.
 		 * */
-        arg->ptr_pam_ptr = pamh;
+        	arg->ptr_pam_ptr = pamh;
 		return TRUE;
 	} while (FALSE);
 
@@ -202,7 +202,7 @@ bool do_pam_authentication(struct pam_thread_arg *arg)
 		      arg->atype, what, pam_strerror(pamh, retval),
 		      arg->st_serialno, arg->c_name, arg->c_instance_serial,
 		      arg->name);
-	if(pamh =! NULL) {
+	if(pamh != NULL) {
       pam_end(pamh, retval);
       pamh = NULL;
     }
@@ -212,7 +212,6 @@ bool do_pam_authentication(struct pam_thread_arg *arg)
 bool impl_pam_close_session(pam_handle_t *pamh)
 {
   int retval;
-  const char *what;
 
   /* This do-while structure is designed to allow a logical cascade
    * without excessive indentation.  No actual looping happens.
@@ -220,13 +219,13 @@ bool impl_pam_close_session(pam_handle_t *pamh)
    */
   do {
 
-    what = "pam_end_session"
     retval = pam_close_session(pamh, 0);
     if (retval != PAM_SUCCESS) {
       pam_end(pamh, retval);
       break;
     }
-    log_pam_step(arg, what);
+    //log_pam_step(arg, what);
+	 DBG(DBG_XAUTH, DBG_log("pam_end_session called"));
 
     /* great success! */
     pam_end(pamh, retval);
@@ -235,8 +234,7 @@ bool impl_pam_close_session(pam_handle_t *pamh)
   } while (FALSE);
 
   /* common failure code */
-  libreswan_log("FAILED during %s with '%s' for state #%lu, %s[%lu] user=%s.",
-                what, pam_strerror(pamh, retval));
+  libreswan_log("FAILED during pam_end_session -> with '%s' for state ", pam_strerror(pamh, retval));
   pam_end(pamh, retval);
   pamh = NULL;
   return FALSE;
