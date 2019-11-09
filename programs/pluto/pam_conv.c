@@ -213,6 +213,7 @@ bool impl_pam_close_session(void *pamh)
 {
   int retval;
   pam_handle_t *pam_handle = (pam_handle_t*)pamh;
+  libreswan_log("GTL in pam_close_session");
   /* This do-while structure is designed to allow a logical cascade
    * without excessive indentation.  No actual looping happens.
    * Failure is handled by "break".
@@ -234,7 +235,7 @@ bool impl_pam_close_session(void *pamh)
   } while (FALSE);
 
   /* common failure code */
-  libreswan_log("FAILED during pam_end_session -> with '%s' for state ", pam_strerror(pamh, retval));
+  libreswan_log("FAILED during pam_end_session -> with '%s' for state ", pam_strerror(pam_handle, retval));
   pam_end(pam_handle, retval);
   pam_handle = NULL;
   return FALSE;
