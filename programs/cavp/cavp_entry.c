@@ -31,15 +31,15 @@ void op_chunk(const struct cavp_entry *entry,
 		exit(1);
 	}
 	freeanychunk(*(entry->chunk));
-	*(entry->chunk) = chunk_from_hex(value, entry->key);
+	*(entry->chunk) = decode_hex_to_chunk(entry->key, value);
 }
 
 void op_symkey(const struct cavp_entry *entry,
 	       const char *value)
 {
 	release_symkey(__func__, "entry", entry->symkey);
-	chunk_t chunk = chunk_from_hex(value, entry->key);
-	*(entry->symkey) = symkey_from_hunk("symkey", chunk);
+	chunk_t chunk = decode_hex_to_chunk(entry->key, value);
+	*(entry->symkey) = symkey_from_chunk("symkey", chunk);
 	freeanychunk(chunk);
 }
 

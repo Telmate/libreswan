@@ -1,6 +1,6 @@
 # Perform post.mortem on a test result, for libreswan.
 #
-# Copyright (C) 2015-2019 Andrew Cagney
+# Copyright (C) 2015-2016 Andrew Cagney <cagney@gnu.org>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by the
@@ -24,16 +24,11 @@ from fab import logutil
 from fab import jsonutil
 
 # Strings used to mark up files; see also runner.py where it marks up
-# the file names.  The sanitizer is hardwired to recognize CUT & TUC
-# so don't change those strings.
-
-RHS = "<<<<<<<<<<"
-LHS = ">>>>>>>>>>"
-CUT = LHS + "cut" + LHS
-TUC = RHS + "tuc" + RHS
+# the file names.
+CUT = ">>>>>>>>>>cut>>>>>>>>>>"
+TUC = "<<<<<<<<<<tuc<<<<<<<<<<"
 DONE = CUT + " done " + TUC
-TIMEOUT = "timeout while running test script"
-EXCEPTION = "exception while running test script"
+
 
 class Resolution:
     PASSED = "passed"
@@ -92,19 +87,13 @@ class Resolution:
 
 class Issues:
 
-    ABSENT = "absent"
-    SANITIZER_FAILED = "sanitizer-failed"
-
     ASSERTION = "ASSERTION"
     EXPECTATION = "EXPECTATION"
+
     CORE = "CORE"
     SEGFAULT = "SEGFAULT"
     GPFAULT = "GPFAULT"
-    PRINTF_NULL = "PRINTF_NULL"
-    KERNEL = "KERNEL"
-    ISCNTRL = "ISCNTRL"
-
-    TIMEOUT = "timeout"
+    PRINTF_NULL = "%NULL"
 
     CRASHED = {ASSERTION, EXPECTATION, CORE, SEGFAULT, GPFAULT}
 
@@ -113,6 +102,10 @@ class Issues:
     OUTPUT_TRUNCATED = "output-truncated"
     OUTPUT_WHITESPACE = "output-whitespace"
     OUTPUT_DIFFERENT = "output-different"
+
+    ABSENT = "absent"
+
+    SANITIZER_FAILED = "sanitizer-failed"
 
     BASELINE_FAILED = "baseline-failed"
     BASELINE_PASSED = "baseline-passed"
@@ -176,9 +169,9 @@ class Issues:
 
 
 def _strip(s):
-    s = re.sub(rb"[ \t]+", rb"", s)
-    s = re.sub(rb"\n+", rb"\n", s)
-    s = re.sub(rb"^\n", rb"", s)
+    s = re.sub(r"[ \t]+", r"", s)
+    s = re.sub(r"\n+", r"\n", s)
+    s = re.sub(r"^\n", r"", s)
     return s
 
 def _whitespace(l, r):
@@ -193,10 +186,9 @@ def _diff(logger, ln, l, rn, r):
         logger.debug("_diff '%s' and '%s' fast match", ln, rn)
         return []
     # compare
-    diff = list(difflib.diff_bytes(difflib.unified_diff,
-                                   l.splitlines(), r.splitlines(),
-                                   fromfile=ln.encode(), tofile=rn.encode(),
-                                   lineterm=rb""))
+    diff = list(difflib.unified_diff(l.splitlines(), r.splitlines(),
+                                     fromfile=ln, tofile=rn,
+                                     lineterm=""))
     logger.debug("_diff: %s", diff)
     if not diff:
         # Always return a list.
@@ -223,7 +215,19 @@ def _sanitize_output(logger, raw_path, test):
         logger.error("sanitize command '%s' failed; exit code %s; stderr: '%s'",
                      command, process.returncode, stderr.decode("utf8"))
         return None
-    return stdout
+    return stdout.decode("utf-8")
+
+
+def _load_file(logger, filename):
+    """Load the specified file; return None if it does not exist"""
+
+    if os.path.exists(filename):
+        logger.debug("loading file: %s", filename)
+        with open(filename) as f:
+            return f.read()
+    else:
+        logger.debug("file %s does not exist", filename)
+    return None
 
 
 # The TestResult objects are almost, but not quite, an enum. It
@@ -252,7 +256,7 @@ class TestResult:
         self.issues = Issues(self.logger)
         self.diffs = {}
         self.sanitized_output = {}
-        self._file_contents_cache = {}
+        self.grub_cache = {}
         self.output_directory = output_directory or test.output_directory
         # times
         self._start_time = None
@@ -280,19 +284,13 @@ class TestResult:
                 self.resolution.failed()
             if self.grub(pluto_log_filename, "EXPECTATION FAILED"):
                 self.issues.add(Issues.EXPECTATION, host_name)
-                self.resolution.failed()
+                # self.resolution.failed() XXX: allow expection failures?
             if self.grub(pluto_log_filename, "\(null\)"):
                 self.issues.add(Issues.PRINTF_NULL, host_name)
-                self.resolution.failed()
-            if self.grub(pluto_log_filename, r"[^ -~\n]"):
-                # This won't detect a \n embedded in the middle of a
-                # log line.
-                self.issues.add(Issues.ISCNTRL, host_name)
                 self.resolution.failed()
 
         # Check the raw console output for problems and that it
         # matches expected output.
-
         for host_name in test.host_names:
 
             # Check that the host's raw output is present.
@@ -325,27 +323,38 @@ class TestResult:
             if self.grub(raw_output_filename, r"GPFAULT"):
                 self.issues.add(Issues.GPFAULT, host_name)
                 self.resolution.failed()
-            if self.grub(raw_output_filename, r"\[ *\d+\.\d+\] Call Trace:"):
-                self.issues.add(Issues.KERNEL, host_name)
+            if self.grub(raw_output_filename, r"\(null\)"):
+                self.issues.add(Issues.PRINTF_NULL, host_name)
                 self.resolution.failed()
 
             # Check that the host's raw output is complete.
             #
-            # The last thing written to the file should be the DONE
-            # marker.  If not then it could be: a timeout; an
-            # exception; or the test is still in-progress.
+            # The output can become truncated for several reasons: the
+            # test is a work-in-progress; it crashed due to a timeout;
+            # or it is still being run.
+            #
+            # Don't try to match the prompt ("#").  If this is the
+            # first command in the script, the prompt will not appear
+            # in the output.
+            #
+            # When this happens, mark it as a FAIL.  The
+            # test-in-progress case was hopefully handled further back
+            # with the RESULT hack forcing the test to UNRESOLVED.
 
-            logger.debug("host %s checking if raw console output is complete");
-
-            if self.grub(raw_output_filename, LHS + " " + TIMEOUT):
-                # One of the test scripts hung; all the
-                self.issues.add(Issues.TIMEOUT, host_name)
-                self.resolution.failed()
-
-            if self.grub(raw_output_filename, DONE) is None:
+            ending = ": ==== end ===="
+            logger.debug("host %s checking if raw console output contains '%s' (or '%s')",
+                         host_name, DONE, ending)
+            if self.grub(raw_output_filename, DONE) is None \
+            and self.grub(raw_output_filename, ending) is None:
+                # this is probably truncated output; but if the test
+                # is old it may not be the case. and an unresolved
+                # test, but need to first exclude other options.
                 self.issues.add(Issues.OUTPUT_TRUNCATED, host_name)
-                self.resolution.unresolved()
-
+                result_file = os.path.join(self.output_directory, "RESULT")
+                if os.path.isfile(result_file):
+                    self.resolution.failed()
+                else:
+                    self.resolution.unresolved()
 
             # Sanitize what ever output there is and save it.
             #
@@ -358,7 +367,8 @@ class TestResult:
                               host_name, sanitized_output_path)
             sanitized_output = None
             if quick:
-                sanitized_output = self._file_contents(sanitized_output_path)
+                sanitized_output = _load_file(self.logger,
+                                              sanitized_output_path)
             if sanitized_output is None:
                 sanitized_output = _sanitize_output(self.logger,
                                                     os.path.join(self.output_directory, raw_output_filename),
@@ -369,23 +379,12 @@ class TestResult:
                 continue
             self.sanitized_output[host_name] = sanitized_output
 
-            if self.grep(sanitized_output, r"\(null\)"):
-                self.issues.add(Issues.PRINTF_NULL, host_name)
-                self.resolution.failed()
-
-            if self.grep(sanitized_output, r"[^ -~\r\n\t]"):
-                # Console contains \r\n; this won't detect \n embedded
-                # in the middle of a log line.  Audit emits embedded
-                # escapes!
-                self.issues.add(Issues.ISCNTRL, host_name)
-                self.resolution.failed()
-
             expected_output_path = test.testing_directory("pluto", test.name,
                                                           host_name + ".console.txt")
             self.logger.debug("host %s comparing against known-good output '%s'",
                               host_name, expected_output_path)
 
-            expected_output = self._file_contents(expected_output_path)
+            expected_output = _load_file(self.logger, expected_output_path)
             if expected_output is None:
                 self.issues.add(Issues.OUTPUT_UNCHECKED, host_name)
                 self.resolution.unresolved()
@@ -420,9 +419,6 @@ class TestResult:
 
     def save(self, output_directory=None):
         output_directory = output_directory or self.output_directory
-        if not os.path.exists(self.output_directory):
-            self.logger.debug("output directory missing: %s", output_directory)
-            return
         # write the sanitized console output
         for host_name in self.test.host_names:
             if host_name in self.sanitized_output:
@@ -432,7 +428,7 @@ class TestResult:
                                                          sanitized_output_filename)
                 self.logger.debug("host %s writing sanitized output file: %s",
                                   host_name, sanitized_output_pathname)
-                with open(sanitized_output_pathname, "wb") as f:
+                with open(sanitized_output_pathname, "w") as f:
                     f.write(sanitized_output)
         # write the diffs
         for host_name in self.test.host_names:
@@ -443,63 +439,42 @@ class TestResult:
             diff_pathname = os.path.join(output_directory, diff_filename)
             self.logger.debug("host %s writing diff file %s",
                               host_name, diff_pathname)
-            with open(diff_pathname, "wb") as f:
+            with open(diff_pathname, "w") as f:
                 if diff:
                     for line in diff:
                         f.write(line)
-                        f.write(b"\n")
+                        f.write("\n")
 
-    def _file_contents(self, path):
-        # Find/load the file, and uncompress when needed.
-        if not path in self._file_contents_cache:
-            self.logger.debug("loading contents of '%s'", path)
-            self._file_contents_cache[path] = None
-            for suffix, open_op in [("", open), (".gz", gzip.open), (".bz2", bz2.open),]:
-                zippath = path + suffix
-                if os.path.isfile(zippath):
-                    self.logger.debug("loading '%s' into cache", zippath)
-                    with open_op(path, "rb") as f:
-                        self._file_contents_cache[path] = f.read()
-                        self.logger.debug("loaded contents of '%s'", zippath)
-                        break
-        return self._file_contents_cache[path]
-
-    def grub(self, filename, regex=None, cast=None):
+    def grub(self, filename, regex=None, cast=lambda x: x):
         """Grub around FILENAME to find regex"""
         self.logger.debug("grubbing '%s' for '%s'", filename, regex)
-        path = os.path.join(self.output_directory, filename)
-        contents = self._file_contents(path)
-        return self.grep(contents, regex, cast)
-
-    def grep(self, contents, regex=None, cast=None):
+        # Find/load the file, and uncompress when needed.
+        if not filename in self.grub_cache:
+            self.grub_cache[filename] = None
+            for suffix, open_op in [("", open), (".gz", gzip.open), (".bz2", bz2.open),]:
+                path = os.path.join(self.output_directory, filename + suffix)
+                if os.path.isfile(path):
+                    self.logger.debug("loading '%s' into cache", path)
+                    with open_op(path, "rt") as f:
+                        self.grub_cache[filename] = f.read()
+                        break
+        contents = self.grub_cache[filename]
         if contents is None:
             return None
-        self.logger.debug("grep() content type is %s", type(contents))
         if regex is None:
-            # returns raw bytes
             return contents
-        # convert utf-8 regex to bytes
-        self.logger.debug("grep() encoding regex type %s to raw bytes using utf-8", type(regex))
-        byte_regex = regex.encode()
-        match = re.search(byte_regex, contents, re.MULTILINE)
+        match = re.search(regex, contents, re.MULTILINE)
         if not match:
             return None
         group = match.group(len(match.groups()))
-        self.logger.debug("grep() '%s' matched '%s'", regex, group)
-        if cast:
-            # caller is matching valid utf-8, decode and cast
-            result = cast(group.decode())
-        else:
-            # caller isn't interested in what matched, return success
-            result = True
-        self.logger.debug("grep() result %s", result)
-        return result
+        self.logger.debug("grub '%s' matched '%s'", regex, group)
+        return cast(group)
 
     def start_time(self):
         if not self._start_time:
             # starting debug log at 2018-08-15 13:00:12.275358
             self._start_time = self.grub("debug.log", r"starting debug log at (.*)$",
-                                         cast=jsonutil.ptime)
+                                   cast=jsonutil.ptime)
         return self._start_time
 
     def stop_time(self):
@@ -513,21 +488,21 @@ class TestResult:
         if not self._runtime:
             # stop testing basic-pluto-01 (test 2 of 756) after 79.3 seconds
             self._runtime = self.grub("debug.log", r": stop testing .* after (.*) second",
-                                      cast=float)
+                                cast=float)
         return self._runtime
 
     def boot_time(self):
         if not self._boot_time:
             # stop booting domains after 56.9 seconds
             self._boot_time = self.grub("debug.log", r": stop booting domains after (.*) second",
-                                        cast=float)
+                                  cast=float)
         return self._boot_time
 
     def script_time(self):
         if not self._script_time:
             # stop running scripts east:eastinit.sh ... after 22.4 seconds
             self._script_time = self.grub("debug.log", r": stop running scripts .* after (.*) second",
-                                          cast=float)
+                                    cast=float)
         return self._script_time
 
 

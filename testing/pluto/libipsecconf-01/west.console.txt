@@ -4,7 +4,7 @@ west #
 initdone
 west #
  ipsec start
-Redirecting to: [initsystem]
+Redirecting to: systemctl start ipsec.service
 west #
  sleep 3
 west #

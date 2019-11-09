@@ -21,12 +21,10 @@
 
 void libreswan_log_errno(int e, const char *fmt, ...)
 {
-	LSWBUF(buf) {
-		lswlog_errno_prefix(buf, "ERROR: ");
+	LSWLOG_ERRNO(e, buf) {
 		va_list ap;
 		va_start(ap, fmt);
 		lswlogvf(buf, fmt, ap);
 		va_end(ap);
-		lswlog_errno_suffix(buf, e);
 	}
 }

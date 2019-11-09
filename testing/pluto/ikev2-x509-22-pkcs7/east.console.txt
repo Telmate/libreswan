@@ -2,7 +2,7 @@
 Preparing X.509 files
 east #
  ipsec start
-Redirecting to: [initsystem]
+Redirecting to: systemctl start ipsec.service
 east #
  /testing/pluto/bin/wait-until-pluto-started
 east #
@@ -19,6 +19,8 @@ east #
 |    ikev2 cert encoding: CERT_X509_SIGNATURE (0x4)
 | **parse IKEv2 Certificate Payload:
 |    ikev2 cert encoding: CERT_PKCS7_WRAPPED_X509 (0x1)
+| **parse IKEv2 Certificate Request Payload:
+|    ikev2 cert encoding: CERT_X509_SIGNATURE (0x4)
 | ****emit IKEv2 Certificate Payload:
 |    ikev2 cert encoding: CERT_PKCS7_WRAPPED_X509 (0x1)
 east #
@@ -54,12 +56,13 @@ default via 192.1.2.254 dev eth1
 192.0.1.0/24 dev eth1 scope link src 192.0.2.254
 192.0.2.0/24 dev eth0 proto kernel scope link src 192.0.2.254
 192.1.2.0/24 dev eth1 proto kernel scope link src 192.1.2.23
+192.9.2.0/24 dev eth2 proto kernel scope link src 192.9.2.23
 NSS_CERTIFICATES
 Certificate Nickname                                         Trust Attributes
                                                              SSL,S/MIME,JAR/XPI
 Libreswan test CA for mainca - Libreswan                     CT,, 
 east                                                         u,u,u
-hashsha1                                                     P,,  
+hashsha2                                                     P,,  
 nic                                                          P,,  
 north                                                        P,,  
 road                                                         P,,  

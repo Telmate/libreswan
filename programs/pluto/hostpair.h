@@ -8,7 +8,6 @@
  * Copyright (C) 2011 Avesh Agarwal <avagarwa@redhat.com>
  * Copyright (C) 2012 Paul Wouters <paul@libreswan.org>
  * Copyright (C) 2013 Paul Wouters <pwouters@redhat.com>
- * Copyright (C) 2019 Andrew Cagney <cagney@gnu.org>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -21,51 +20,38 @@
  * for more details.
  *
  */
-
-#include "list_entry.h"
-
 struct host_pair {
-	const char *magic;
-	ip_endpoint local;
-	ip_endpoint remote;
+	struct {
+		ip_address addr;
+		uint16_t host_port;            /* IKE port */
+		bool host_port_specific;        /* if above is interesting */
+	} me, him;
 	struct connection *connections;         /* connections with this pair */
 	struct pending *pending;                /* awaiting Keying Channel */
-	struct list_entry host_pair_entry;
+	struct host_pair *next;
 };
 
-/* export to pending.c */
-extern void host_pair_enqueue_pending(const struct connection *c,
-				      struct pending *p,
-				      struct pending **pnext);
-struct pending **host_pair_first_pending(const struct connection *c);
+extern struct host_pair *host_pairs;
 
 extern void connect_to_host_pair(struct connection *c);
 
-extern struct connection *find_host_pair_connections(const ip_endpoint *local,
-						     const ip_endpoint *remote);
+extern struct connection *find_host_pair_connections(const ip_address *myaddr,
+						     uint16_t myport,
+						     const ip_address *hisaddr,
+						     uint16_t hisport);
 
-extern struct host_pair *find_host_pair(const ip_endpoint *local,
-					const ip_endpoint *remote);
+extern struct host_pair *find_host_pair(const ip_address *myaddr,
+					uint16_t myport,
+					const ip_address *hisaddr,
+					uint16_t hisport);
+
+#define list_rm(etype, enext, e, ehead) { \
+		etype **ep; \
+		for (ep = &(ehead); *ep != (e); ep = &(*ep)->enext) \
+			passert(*ep != NULL); /* we must not come up empty-handed */ \
+		*ep = (e)->enext; \
+	}
 
 void delete_oriented_hp(struct connection *c);
-void host_pair_remove_connection(struct connection *c, bool connection_valid);
 
 extern struct connection *connections;
-
-extern void update_host_pairs(struct connection *c);
-
-extern void release_dead_interfaces(void);
-extern void check_orientations(void);
-
-void init_host_pair(void);
-
-struct connection *find_v2_host_pair_connection(struct msg_digest *md,
-						lset_t *policy, bool *send_reject_response);
-
-struct connection *find_next_host_connection(struct connection *c,
-					     lset_t req_policy, lset_t policy_exact_mask);
-
-struct connection *find_host_connection(const ip_endpoint *local,
-					const ip_endpoint *remote,
-					lset_t req_policy,
-					lset_t policy_exact_mask);

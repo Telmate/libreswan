@@ -13,10 +13,7 @@
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
  * License for more details.
  */
-
-#include <limits.h>		/* for ULONG_MAX */
-#include <string.h>
-
+#include "internal.h"
 #include "libreswan.h"
 
 /*

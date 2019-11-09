@@ -25,9 +25,8 @@ d.ipsec.conf/ike.xml
 d.ipsec.conf/phase2.xml
 d.ipsec.conf/phase2alg.xml
 d.ipsec.conf/sha2-truncbug.xml
-d.ipsec.conf/ms-dh-downgrade.xml
+d.ipsec.conf/msdh-downgrade.xml
 d.ipsec.conf/dns-match-id.xml
-d.ipsec.conf/require-id-on-certificate.xml
 d.ipsec.conf/ppk.xml
 d.ipsec.conf/nat-ikev1-method.xml
 d.ipsec.conf/esp.xml
@@ -134,7 +133,6 @@ d.ipsec.conf/uniqueids.xml
 d.ipsec.conf/logfile.xml
 d.ipsec.conf/logappend.xml
 d.ipsec.conf/logip.xml
-d.ipsec.conf/audit-log.xml
 d.ipsec.conf/logtime.xml
 d.ipsec.conf/force-busy.xml
 d.ipsec.conf/ddos-mode.xml
@@ -154,7 +152,6 @@ d.ipsec.conf/fragicmp.xml
 d.ipsec.conf/hidetos.xml
 d.ipsec.conf/overridemtu.xml
 d.ipsec.conf/seccomp.xml
-d.ipsec.conf/dnssec.xml
 d.ipsec.conf/configsectionsend.xml
 d.ipsec.conf/implicitconns.xml
 d.ipsec.conf/obsolete.xml

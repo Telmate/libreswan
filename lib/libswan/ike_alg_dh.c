@@ -1,7 +1,7 @@
 /*
  * IKE modular algorithm handling interface, for libreswan
  *
- * Copyright (C) 2016-2019 Andrew Cagney <cagney@gnu.org>
+ * Copyright (C) 2016-2017 Andrew Cagney <cagney@gnu.org>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,13 +18,15 @@
 #include <string.h>
 #include <stddef.h>
 #include <sys/types.h>
+#include <libreswan.h>
 
 #include "constants.h"
 #include "lswlog.h"
 #include "ike_alg.h"
 
 #include "ike_alg_dh.h"
-#include "ike_alg_dh_ops.h"
+#include "ike_alg_dh_nss_modp_ops.h"
+#include "ike_alg_dh_nss_ecp_ops.h"
 
 /*
  * Oakley group description
@@ -35,17 +37,17 @@
  */
 
 /* magic signifier */
-const struct dh_desc unset_group = {
+const struct oakley_group_desc unset_group = {
 	.group = 65535, /* Reserved for private use */
 };
 
 #ifdef USE_DH2
-const struct dh_desc ike_alg_dh_modp1024 = {
+const struct oakley_group_desc oakley_group_modp1024 = {
 	.common = {
 		.algo_type = IKE_ALG_DH,
 		.name = "MODP1024",
 		.fqn = "MODP1024",
-		.names = "modp1024,dh2",
+		.names = { "modp1024", "dh2", },
 		.id = {
 			[IKEv1_OAKLEY_ID] = OAKLEY_GROUP_MODP1024,
 			[IKEv1_ESP_ID] = OAKLEY_GROUP_MODP1024,
@@ -60,12 +62,12 @@ const struct dh_desc ike_alg_dh_modp1024 = {
 };
 #endif
 
-const struct dh_desc ike_alg_dh_modp1536 = {
+const struct oakley_group_desc oakley_group_modp1536 = {
 	.common = {
 		.algo_type = IKE_ALG_DH,
 		.name = "MODP1536",
 		.fqn = "MODP1536",
-		.names = "modp1536,dh5",
+		.names = { "modp1536", "dh5", },
 		.id = {
 			[IKEv1_OAKLEY_ID] = OAKLEY_GROUP_MODP1536,
 			[IKEv1_ESP_ID] = OAKLEY_GROUP_MODP1536,
@@ -79,12 +81,12 @@ const struct dh_desc ike_alg_dh_modp1536 = {
 	.dh_ops = &ike_alg_dh_nss_modp_ops,
 };
 
-const struct dh_desc ike_alg_dh_modp2048 = {
+const struct oakley_group_desc oakley_group_modp2048 = {
 	.common = {
 		.algo_type = IKE_ALG_DH,
 		.name = "MODP2048",
 		.fqn = "MODP2048",
-		.names = "modp2048,dh14",
+		.names = { "modp2048", "dh14", },
 		.id = {
 			[IKEv1_OAKLEY_ID] = OAKLEY_GROUP_MODP2048,
 			[IKEv1_ESP_ID] = OAKLEY_GROUP_MODP2048,
@@ -99,12 +101,12 @@ const struct dh_desc ike_alg_dh_modp2048 = {
 	.dh_ops = &ike_alg_dh_nss_modp_ops,
 };
 
-const struct dh_desc ike_alg_dh_modp3072 = {
+const struct oakley_group_desc oakley_group_modp3072 = {
 	.common = {
 		.algo_type = IKE_ALG_DH,
 		.name = "MODP3072",
 		.fqn = "MODP3072",
-		.names = "modp3072,dh15",
+		.names = { "modp3072", "dh15", },
 		.id = {
 			[IKEv1_OAKLEY_ID] = OAKLEY_GROUP_MODP3072,
 			[IKEv1_ESP_ID] = OAKLEY_GROUP_MODP3072,
@@ -119,12 +121,12 @@ const struct dh_desc ike_alg_dh_modp3072 = {
 	.dh_ops = &ike_alg_dh_nss_modp_ops,
 };
 
-const struct dh_desc ike_alg_dh_modp4096 = {
+const struct oakley_group_desc oakley_group_modp4096 = {
 	.common = {
 		.algo_type = IKE_ALG_DH,
 		.name = "MODP4096",
 		.fqn = "MODP4096",
-		.names = "modp4096,dh16",
+		.names = { "modp4096", "dh16", },
 		.id = {
 			[IKEv1_OAKLEY_ID] = OAKLEY_GROUP_MODP4096,
 			[IKEv1_ESP_ID] = OAKLEY_GROUP_MODP4096,
@@ -139,12 +141,12 @@ const struct dh_desc ike_alg_dh_modp4096 = {
 	.dh_ops = &ike_alg_dh_nss_modp_ops,
 };
 
-const struct dh_desc ike_alg_dh_modp6144 = {
+const struct oakley_group_desc oakley_group_modp6144 = {
 	.common = {
 		.algo_type = IKE_ALG_DH,
 		.name = "MODP6144",
 		.fqn = "MODP6144",
-		.names = "modp6144,dh17",
+		.names = { "modp6144", "dh17", },
 		.id = {
 			[IKEv1_OAKLEY_ID] = OAKLEY_GROUP_MODP6144,
 			[IKEv1_ESP_ID] = OAKLEY_GROUP_MODP6144,
@@ -159,12 +161,12 @@ const struct dh_desc ike_alg_dh_modp6144 = {
 	.dh_ops = &ike_alg_dh_nss_modp_ops,
 };
 
-const struct dh_desc ike_alg_dh_modp8192 = {
+const struct oakley_group_desc oakley_group_modp8192 = {
 	.common = {
 		.algo_type = IKE_ALG_DH,
 		.name = "MODP8192",
 		.fqn = "MODP8192",
-		.names = "modp8192,dh18",
+		.names = { "modp8192", "dh18", },
 		.id = {
 			[IKEv1_OAKLEY_ID] = OAKLEY_GROUP_MODP8192,
 			[IKEv1_ESP_ID] = OAKLEY_GROUP_MODP8192,
@@ -179,12 +181,12 @@ const struct dh_desc ike_alg_dh_modp8192 = {
 	.dh_ops = &ike_alg_dh_nss_modp_ops,
 };
 
-const struct dh_desc ike_alg_dh_dh19 = {
+const struct oakley_group_desc oakley_group_dh19 = {
 	.common = {
 		.algo_type = IKE_ALG_DH,
 		.name = "DH19",
 		.fqn = "DH19",
-		.names = "dh19,ecp_256,ecp256",
+		.names = { "dh19", "ecp_256", },
 		.id = {
 			[IKEv1_OAKLEY_ID] = OAKLEY_GROUP_ECP_256,
 			[IKEv1_ESP_ID] = -1,
@@ -198,12 +200,12 @@ const struct dh_desc ike_alg_dh_dh19 = {
 	.dh_ops = &ike_alg_dh_nss_ecp_ops,
 };
 
-const struct dh_desc ike_alg_dh_dh20 = {
+const struct oakley_group_desc oakley_group_dh20 = {
 	.common = {
 		.algo_type = IKE_ALG_DH,
 		.name = "DH20",
 		.fqn = "DH20",
-		.names = "dh20,ecp_384,ecp384",
+		.names = { "dh20", "ecp_384", },
 		.id = {
 			[IKEv1_OAKLEY_ID] = OAKLEY_GROUP_ECP_384,
 			[IKEv1_ESP_ID] = -1,
@@ -217,12 +219,12 @@ const struct dh_desc ike_alg_dh_dh20 = {
 	.dh_ops = &ike_alg_dh_nss_ecp_ops,
 };
 
-const struct dh_desc ike_alg_dh_dh21 = {
+const struct oakley_group_desc oakley_group_dh21 = {
 	.common = {
 		.algo_type = IKE_ALG_DH,
 		.name = "DH21",
 		.fqn = "DH21",
-		.names = "dh21,ecp_521,ecp521",
+		.names = { "dh21", "ecp_521", },
 		.id = {
 			[IKEv1_OAKLEY_ID] = OAKLEY_GROUP_ECP_521,
 			[IKEv1_ESP_ID] = -1,
@@ -237,12 +239,12 @@ const struct dh_desc ike_alg_dh_dh21 = {
 };
 
 #ifdef USE_DH22
-const struct dh_desc ike_alg_dh_dh22 = {
+const struct oakley_group_desc oakley_group_dh22 = {
 	.common = {
 		.algo_type = IKE_ALG_DH,
 		.name = "DH22",
 		.fqn = "DH22",
-		.names = "dh22",
+		.names = { "dh22", },
 		.id = {
 			[IKEv1_OAKLEY_ID] = OAKLEY_GROUP_DH22,
 			[IKEv1_ESP_ID] = OAKLEY_GROUP_DH22,
@@ -258,12 +260,12 @@ const struct dh_desc ike_alg_dh_dh22 = {
 #endif
 
 #ifdef USE_DH23
-const struct dh_desc ike_alg_dh_dh23 = {
+const struct oakley_group_desc oakley_group_dh23 = {
 	.common = {
 		.algo_type = IKE_ALG_DH,
 		.name = "DH23",
 		.fqn = "DH23",
-		.names = "dh23",
+		.names = { "dh23", },
 		.id = {
 			[IKEv1_OAKLEY_ID] = OAKLEY_GROUP_DH23,
 			[IKEv1_ESP_ID] = OAKLEY_GROUP_DH23,
@@ -280,12 +282,12 @@ const struct dh_desc ike_alg_dh_dh23 = {
 #endif
 
 #ifdef USE_DH24
-const struct dh_desc ike_alg_dh_dh24 = {
+const struct oakley_group_desc oakley_group_dh24 = {
 	.common = {
 		.algo_type = IKE_ALG_DH,
 		.name = "DH24",
 		.fqn = "DH24",
-		.names = "dh24",
+		.names = { "dh24", },
 		.id = {
 			[IKEv1_OAKLEY_ID] = OAKLEY_GROUP_DH24,
 			[IKEv1_ESP_ID] = OAKLEY_GROUP_DH24,
@@ -304,12 +306,12 @@ const struct dh_desc ike_alg_dh_dh24 = {
 /* https://tools.ietf.org/html/rfc8031 */
 
 #ifdef USE_DH31
-const struct dh_desc ike_alg_dh_dh31 = {
+const struct oakley_group_desc oakley_group_dh31 = {
 	.common = {
 		.algo_type = IKE_ALG_DH,
 		.name = "DH31",
 		.fqn = "DH31",
-		.names = "dh31,curve25519",
+		.names = { "dh31", "curve25519", },
 		.id = {
 			[IKEv1_OAKLEY_ID] = OAKLEY_GROUP_CURVE25519,
 			[IKEv1_ESP_ID] = -1,

@@ -2,7 +2,7 @@
  *
  * Copyright (C) 1998, 1999, 2000  Henry Spencer.
  * Copyright (C) 1999, 2000, 2001  Richard Guy Briggs
- * Copyright (C) 2017-2019 Andrew Cagney <cagney@gnu.org>
+ * Copyright (C) 2017-2018  Andrew Cagney
  *
  * This library is free software; you can redistribute it and/or modify it
  * under the terms of the GNU Library General Public License as published by
@@ -47,8 +47,6 @@
  */
 
 typedef struct { struct timeval mt; } monotime_t;
-
-monotime_t monotime(intmax_t seconds);
 
 #define MONOTIME_EPOCH { { 0, 0 } }
 

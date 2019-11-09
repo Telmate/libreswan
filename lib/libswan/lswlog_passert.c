@@ -1,4 +1,4 @@
-/* Output an assertion failure, for libreswan
+/* Output an expection failure, for libreswan
  *
  * Copyright (C) 2017 Andrew Cagney
  *
@@ -24,9 +24,10 @@ void lswlog_passert_prefix(struct lswlog *buf)
 	lswlogs(buf, "ABORT: ASSERTION FAILED: ");
 }
 
-void lswlog_passert_suffix(struct lswlog *buf, where_t where)
+void lswlog_passert_suffix(struct lswlog *buf, const char *func,
+			   const char *file, unsigned long line)
 {
-	jam(buf, " "PRI_WHERE, pri_where(where));
+	lswlog_source_line(buf, func, file, line);
 	lswlog_to_error_stream(buf);
 	/* this needs to panic */
 	abort();

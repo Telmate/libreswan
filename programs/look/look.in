@@ -1,9 +1,9 @@
 #! /bin/sh
 # quick look at current connections and related information
 # Copyright (C) 1998, 1999  Henry Spencer.
-# Copyright (C) 2012-2019 Paul Wouters <pwouters@redhat.com>
+# Copyright (C) 2012  Paul Wouters
 # Copyright (C) 2015 Tuomo Soini <tis@foobar.fi>
-# Copyright (C) 2018-2019 Andrew Cagney <cagney@gnu.org>
+# Copyright (C) 2018  Andrew Cagney
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by the
@@ -62,7 +62,7 @@ done | awk '
 
 # tncfg (mostly as a divider line)
 if [ -f /proc/net/ipsec_tncfg ]; then
-    grep -E -v 'NULL[ \t]+mtu=0\(0\)[ \t]+->[ \t]+0' /proc/net/ipsec_tncfg | \
+    egrep -v 'NULL[ \t]+mtu=0\(0\)[ \t]+->[ \t]+0' /proc/net/ipsec_tncfg | \
 	paste -d % | sed 's/%/   /g' | sed 's/ -> /->/g'
 fi
 
@@ -71,8 +71,8 @@ if [ -f /proc/net/ipsec_spi ]; then
     sort /proc/net/ipsec_spi
 fi
 
-# xfrm
-if [ -f /proc/sys/net/core/xfrm_acq_expires ]; then
+# xfrm for netkey
+if [ -f /proc/net/pfkey ]; then
     echo "XFRM state:"
     ip xfrm state
     echo "XFRM policy:"
@@ -145,10 +145,10 @@ if [ -f @IPSEC_NSSDIR@/cert9.db ]; then
     echo NSS_CERTIFICATES
     certutil -L -d sql:@IPSEC_NSSDIR@ | head -4
     certutil -L -d sql:@IPSEC_NSSDIR@ | \
-	grep -E -v '^NSS_CERTIFICATES|^$|Trust Attributes|MIME,' | LC_ALL=C sort
+	egrep -v '^NSS_CERTIFICATES|^$|Trust Attributes|MIME,' | LC_ALL=C sort
 elif [ -f @IPSEC_NSSDIR@/cert8.db ]; then
     echo NSS_CERTIFICATES
     certutil -L -d @IPSEC_NSSDIR@ | head -4
     certutil -L -d @IPSEC_NSSDIR@ | \
-	grep -E -v '^NSS_CERTIFICATES|^$|Trust Attributes|MIME,' | LC_ALL=C sort
+	egrep -v '^NSS_CERTIFICATES|^$|Trust Attributes|MIME,' | LC_ALL=C sort
 fi

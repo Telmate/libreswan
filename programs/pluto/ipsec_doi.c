@@ -10,7 +10,7 @@
  * Copyright (C) 2012-2018 Paul Wouters <pwouters@redhat.com>
  * Copyright (C) 2013 David McCullough <ucdevel@gmail.com>
  * Copyright (C) 2013 Matt Rogers <mrogers@redhat.com>
- * Copyright (C) 2014-2019 Andrew Cagney <cagney@gnu.org>
+ * Copyright (C) 2014,2017 Andrew Cagney <cagney@gmail.com>
  * Copyright (C) 2017-2018 Antony Antony <antony@phenome.org>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -35,6 +35,7 @@
 #include <arpa/inet.h>
 #include <resolv.h>
 
+#include <libreswan.h>
 #include "libreswan/pfkeyv2.h"
 
 #include "sysdep.h"
@@ -73,7 +74,7 @@
 #include "ikev2.h"
 #include "ikev2_send.h"
 #include "ikev1_xauth.h"
-#include "ip_info.h"
+
 #include "vendor.h"
 #include "nat_traversal.h"
 #include "virtual.h"	/* needs connections.h */
@@ -138,7 +139,7 @@ void unpack_KE_from_helper(struct state *st,
  *  value with zeros.
  */
 bool accept_KE(chunk_t *dest, const char *val_name,
-	       const struct dh_desc *gr,
+	       const struct oakley_group_desc *gr,
 	       struct payload_digest *ke_pd)
 {
 	if (ke_pd == NULL) {
@@ -154,10 +155,9 @@ bool accept_KE(chunk_t *dest, const char *val_name,
 		return false;
 	}
 	free_chunk_contents(dest); /* XXX: ever needed? */
-	*dest = clone_hunk(pbs_in_left_as_shunk(pbs), val_name);
+	*dest = clone_in_pbs_left_as_chunk(pbs, val_name);
 	if (DBGP(DBG_CRYPT)) {
-		DBG_log("DH public value received:");
-		DBG_dump_hunk(NULL, *dest);
+		DBG_dump_chunk("DH public value received:\n", *dest);
 	}
 	return true;
 }
@@ -199,9 +199,10 @@ void ipsecdoi_initiate(fd_t whack_sock,
 		       struct connection *c,
 		       lset_t policy,
 		       unsigned long try,
-		       so_serial_t replacing,
-		       const threadtime_t *inception,
-		       struct xfrm_user_sec_ctx_ike *uctx
+		       so_serial_t replacing
+#ifdef HAVE_LABELED_IPSEC
+		       , struct xfrm_user_sec_ctx_ike *uctx
+#endif
 		       )
 {
 	/*
@@ -221,12 +222,11 @@ void ipsecdoi_initiate(fd_t whack_sock,
 		initiator_function *initiator = pick_initiator(c, policy);
 
 		if (initiator != NULL) {
-			/*
-			 * initiator will create a state (and that in
-			 * turn will start its timing it), need a way
-			 * to stop it.
-			 */
-			initiator(whack_sock, c, NULL, policy, try, inception, uctx);
+			initiator(whack_sock, c, NULL, policy, try
+#ifdef HAVE_LABELED_IPSEC
+				  , uctx
+#endif
+				  );
 		} else {
 			/* fizzle: whack_sock will be unused */
 			close_any(&whack_sock);
@@ -234,19 +234,23 @@ void ipsecdoi_initiate(fd_t whack_sock,
 	} else if (HAS_IPSEC_POLICY(policy)) {
 		if (!IS_ISAKMP_SA_ESTABLISHED(st->st_state)) {
 			/* leave our Phase 2 negotiation pending */
-			add_pending(whack_sock, pexpect_ike_sa(st),
-				    c, policy, try,
-				    replacing, uctx);
-		} else if (st->st_ike_version == IKEv2) {
-			struct pending p = {
-				.whack_sock = whack_sock,
-				.ike = pexpect_ike_sa(st),
-				.connection = c,
-				.try = try,
-				.policy = policy,
-				.replacing = replacing,
-				.uctx = uctx,
-			};
+			add_pending(whack_sock, st, c, policy, try,
+				    replacing
+#ifdef HAVE_LABELED_IPSEC
+				    , uctx
+#endif
+				    );
+		} else if (st->st_ikev2) {
+			struct pending p;
+			p.whack_sock = whack_sock;
+			p.isakmp_sa = st;
+			p.connection = c;
+			p.try = try;
+			p.policy = policy;
+			p.replacing = replacing;
+#ifdef HAVE_LABELED_IPSEC
+			p.uctx = uctx;
+#endif
 			ikev2_initiate_child_sa(&p);
 		} else {
 			/* ??? we assume that peer_nexthop_sin isn't important:
@@ -254,7 +258,11 @@ void ipsecdoi_initiate(fd_t whack_sock,
 			 * It isn't clear what to do with the error return.
 			 */
 			quick_outI1(whack_sock, st, c, policy, try,
-				    replacing, uctx);
+				    replacing
+#ifdef HAVE_LABELED_IPSEC
+				    , uctx
+#endif
+				    );
 			}
 	}
 }
@@ -270,12 +278,6 @@ void ipsecdoi_initiate(fd_t whack_sock,
  */
 void ipsecdoi_replace(struct state *st, unsigned long try)
 {
-	/*
-	 * start billing the new state.  The old state also gets
-	 * billed for this function call, oops.
-	 */
-	threadtime_t inception = threadtime_start();
-
 	if (IS_IKE_SA(st)) {
 		/* start from policy in connection */
 
@@ -289,14 +291,12 @@ void ipsecdoi_replace(struct state *st, unsigned long try)
 		initiator_function *initiator = pick_initiator(c, policy);
 
 		if (initiator != NULL) {
-			/*
-			 * initiator will create a state (and that in
-			 * turn will start its timing it), need a way
-			 * to stop it.
-			 */
 			(void) initiator(dup_any(st->st_whack_sock),
-					 c, st, policy, try, &inception,
-				st->sec_ctx);
+				c, st, policy, try
+#ifdef HAVE_LABELED_IPSEC
+				, st->sec_ctx
+#endif
+				);
 		}
 	} else {
 		/*
@@ -329,32 +329,36 @@ void ipsecdoi_replace(struct state *st, unsigned long try)
 				policy |= POLICY_TUNNEL;
 		}
 
-		if (st->st_ike_version == IKEv1)
+		if (!st->st_ikev2)
 			passert(HAS_IPSEC_POLICY(policy));
 
 		ipsecdoi_initiate(dup_any(st->st_whack_sock), st->st_connection,
-				  policy, try, st->st_serialno, &inception,
-			st->sec_ctx);
+			policy, try, st->st_serialno
+#ifdef HAVE_LABELED_IPSEC
+			, st->sec_ctx
+#endif
+			);
 	}
 }
 
 /*
  * look for the existence of a non-expiring preloaded public key
  */
-bool has_preloaded_public_key(const struct state *st)
+bool has_preloaded_public_key(struct state *st)
 {
-	const struct connection *c = st->st_connection;
+	struct connection *c = st->st_connection;
 
 	/* do not consider rw connections since
 	 * the peer's identity must be known
 	 */
 	if (c->kind == CK_PERMANENT) {
-		/* look for a matching RSA public key */
-		for (const struct pubkey_list *p = pluto_pubkeys; p != NULL;
-		     p = p->next) {
-			const struct pubkey *key = p->key;
+		struct pubkey_list *p;
 
-			if (key->type == &pubkey_type_rsa &&
+		/* look for a matching RSA public key */
+		for (p = pluto_pubkeys; p != NULL; p = p->next) {
+			struct pubkey *key = p->key;
+
+			if (key->alg == PUBKEY_ALG_RSA &&
 			    same_id(&c->spd.that.id, &key->id) &&
 			    is_realtime_epoch(key->until_time)) {
 				/* found a preloaded public key */
@@ -376,8 +380,8 @@ bool has_preloaded_public_key(const struct state *st)
 bool extract_peer_id(enum ike_id_type kind, struct id *peer, const pb_stream *id_pbs)
 {
 	size_t left = pbs_left(id_pbs);
-
-	*peer = (struct id) {.kind = kind };	/* clears everything */
+	memset(peer, 0x00, sizeof(struct id));
+	peer->kind = kind;
 
 	switch (kind) {
 	/* ident types mostly match between IKEv1 and IKEv2 */
@@ -385,13 +389,17 @@ bool extract_peer_id(enum ike_id_type kind, struct id *peer, const pb_stream *id
 	case ID_IPV6_ADDR:
 		/* failure mode for initaddr is probably inappropriate address length */
 	{
-		struct pbs_in in_pbs = *id_pbs;
-		if (!pbs_in_address(&peer->ip_addr,
-				    (peer->kind == ID_IPV4_ADDR ? &ipv4_info :
-				     &ipv6_info),
-				    &in_pbs, "peer ID")) {
+		err_t ugh = initaddr(id_pbs->cur, left,
+				peer->kind == ID_IPV4_ADDR ? AF_INET : AF_INET6,
+				&peer->ip_addr);
+
+		if (ugh != NULL) {
+			loglog(RC_LOG_SERIOUS,
+				"improper %s identification payload: %s",
+				enum_show(&ike_idtype_names, peer->kind),
+				ugh);
 			/* XXX Could send notification back */
-			return false;
+			return FALSE;
 		}
 	}
 	break;
@@ -410,7 +418,7 @@ bool extract_peer_id(enum ike_id_type kind, struct id *peer, const pb_stream *id
 		if (memchr(id_pbs->cur, '\0', left) != NULL) {
 			loglog(RC_LOG_SERIOUS,
 				"Phase 1 (Parent)ID Payload of type %s contains a NUL",
-				enum_show(&ike_idtype_names, kind));
+				enum_show(&ike_idtype_names, peer->kind));
 			return FALSE;
 		}
 
@@ -422,27 +430,31 @@ bool extract_peer_id(enum ike_id_type kind, struct id *peer, const pb_stream *id
 	case ID_KEY_ID:
 		setchunk(peer->name, id_pbs->cur, left);
 		DBG(DBG_PARSING,
-		    DBG_dump_hunk("KEY ID:", peer->name));
+		    DBG_dump_chunk("KEY ID:", peer->name));
 		break;
 
 	case ID_DER_ASN1_DN:
 		setchunk(peer->name, id_pbs->cur, left);
 		DBG(DBG_PARSING,
-		    DBG_dump_hunk("DER ASN1 DN:", peer->name));
+		    DBG_dump_chunk("DER ASN1 DN:", peer->name));
 		break;
 
 	case ID_NULL:
 		if (left != 0) {
+			setchunk(peer->name, id_pbs->cur, left);
 			DBG(DBG_PARSING,
-				DBG_dump("unauthenticated NULL ID:", id_pbs->cur, left));
+				DBG_dump_chunk("unauthenticated NULL ID:", peer->name));
+			peer->name.ptr = NULL;
+			peer->name.len = 0;
 		}
+		peer->kind = ID_NULL;
 		break;
 
 	default:
 		/* XXX Could send notification back */
 		loglog(RC_LOG_SERIOUS,
 			"Unsupported identity type (%s) in Phase 1 (Parent) ID Payload",
-			enum_show(&ike_idtype_names, kind));
+			enum_show(&ike_idtype_names, peer->kind));
 		return FALSE;
 	}
 
@@ -452,16 +464,21 @@ bool extract_peer_id(enum ike_id_type kind, struct id *peer, const pb_stream *id
 void initialize_new_state(struct state *st,
 			  struct connection *c,
 			  lset_t policy,
-			  int try)
+			  int try,
+			  fd_t whack_sock)
 {
-	update_state_connection(st, c);
+	st->st_connection = c;	/* surely safe: must be a new state */
+
 	set_state_ike_endpoints(st, c);
 
+	set_cur_state(st);                                      /* we must reset before exit */
 	st->st_policy = policy & ~POLICY_IPSEC_MASK;        /* clear bits */
+	st->st_whack_sock = whack_sock;
 	st->st_try = try;
 
-	for (const struct spd_route *sr = &c->spd;
-	     sr != NULL; sr = sr->spd_next) {
+	const struct spd_route *sr;
+
+	for (sr = &c->spd; sr != NULL; sr = sr->spd_next) {
 		if (sr->this.xauth_client) {
 			if (sr->this.xauth_username != NULL) {
 				jam_str(st->st_xauth_username, sizeof(st->st_xauth_username), sr->this.xauth_username);
@@ -470,7 +487,9 @@ void initialize_new_state(struct state *st,
 		}
 	}
 
-	binlog_refresh_state(st);
+	insert_state(st); /* needs cookies, connection */
+
+	set_cur_state(st);
 }
 
 void send_delete(struct state *st)
@@ -481,61 +500,21 @@ void send_delete(struct state *st)
 		dbg("#%lu send %s delete notification for %s",
 		    st->st_serialno,
 		    enum_name(&ike_version_names, st->st_ike_version),
-		    st->st_state->name);
-		switch (st->st_ike_version) {
-		case IKEv1:
-			send_v1_delete(st);
-			break;
-		case IKEv2:
-			record_v2_delete(st);
-			send_recorded_v2_ike_msg(st, "delete notification");
-			struct ike_sa *ike = ike_sa(st);
-			/*
-			 * increase message ID for next delete message
-			 * ikev2_update_msgid_counters need an md
-			 *
-			 * Since this is a request, this ends st_msgid
-			 * needs an update so that there is somewhere
-			 * for the reply to go.  If ST is a CHILD SA
-			 * then the next thing that happens is that it
-			 * gets deleted so no point trying to route
-			 * the message to that (hacks in the event
-			 * loop redirect this to the IKE SA, but lets
-			 * make the hack more transparent).
-			 *
-			 * Save the nextuse' value used by this
-			 * message and not the next.
-			 */
-			msgid_t new_msgid = ike->sa.st_msgid_nextuse;
-			msgid_t new_nextuse = ike->sa.st_msgid_nextuse + 1;
-			dbg("Message ID: IKE #%lu sender #%lu in %s record 'n' sending delete request so forcing IKE nextuse="PRI_MSGID"->"PRI_MSGID" and sender msgid="PRI_MSGID"->"PRI_MSGID,
-			    ike->sa.st_serialno, st->st_serialno, __func__,
-			    ike->sa.st_msgid_nextuse, new_nextuse,
-			    st->st_msgid, new_msgid);
-			ike->sa.st_msgid = new_msgid;
-			ike->sa.st_msgid_nextuse = new_nextuse;
-			/*
-			 * XXX: The record 'n' send call shouldn't be
-			 * needed.  Instead, as part of this
-			 * transition (live -> being-deleted) the
-			 * standard success_v2_transition() code path
-			 * should get to do the right thing.
-			 *
-			 * XXX: The record 'n' send call leads to an
-			 * RFC violation.  The lack of a state
-			 * transition means there's nothing set up to
-			 * wait for the ack.  And that in turn means
-			 * that the next packet will be sent before
-			 * this one has had a response.
-			 */
-			dbg("Message ID: IKE #%lu sender #%lu in %s hacking around record ' send",
-			    ike->sa.st_serialno, st->st_serialno, __func__);
-			v2_msgid_update_sent(ike, &ike->sa, NULL/*new exchange*/, MESSAGE_REQUEST);
-			break;
-		default:
-			bad_case(st->st_ike_version);
-		}
+		    st->st_state_name);
+		st->st_ikev2 ? send_v2_delete(st) : send_v1_delete(st);
 	}
+}
+
+static void pstats_sa(bool nat, bool tfc, bool esn)
+{
+	if (nat)
+		pstats_ipsec_encap_yes++;
+	else
+		pstats_ipsec_encap_no++;
+	if (esn)
+		pstats_ipsec_esn++;
+	if (tfc)
+		pstats_ipsec_tfc++;
 }
 
 void lswlog_child_sa_established(struct lswlog *buf, struct state *st)
@@ -544,6 +523,11 @@ void lswlog_child_sa_established(struct lswlog *buf, struct state *st)
 	const char *ini = " {";
 
 	lswlogs(buf, c->policy & POLICY_TUNNEL ? " tunnel mode" : " transport mode");
+
+	/* don't count IKEv1 half ipsec sa */
+	if (st->st_state == STATE_QUICK_R1) {
+		pstats_ipsec_sa++;
+	}
 
 	if (st->st_esp.present) {
 		bool nat = (st->hidden_variables.st_nat_traversal & NAT_T_DETECTED) != 0;
@@ -573,15 +557,26 @@ void lswlog_child_sa_established(struct lswlog *buf, struct state *st)
 		}
 		lswlogf(buf, "-%s", st->st_esp.attrs.transattrs.ta_integ->common.fqn);
 
-		if ((st->st_ike_version == IKEv2) && st->st_pfs_group != NULL)  {
+		if (st->st_ikev2 && st->st_pfs_group != NULL)  {
 			lswlogs(buf, "-");
 			lswlogs(buf, st->st_pfs_group->common.name);
 		}
 
 		ini = " ";
+
+		pstats_ipsec_esp++;
+		pstatsv(ipsec_encrypt, st->st_ikev2,
+			st->st_esp.attrs.transattrs.ta_encrypt->common.id[IKEv1_ESP_ID],
+			st->st_esp.attrs.transattrs.ta_encrypt->common.id[IKEv2_ALG_ID]);
+		pstatsv(ipsec_integ, st->st_ikev2,
+			st->st_esp.attrs.transattrs.ta_integ->common.id[IKEv1_ESP_ID],
+			st->st_esp.attrs.transattrs.ta_integ->common.id[IKEv2_ALG_ID]);
+		pstats_sa(nat, tfc, esn);
 	}
 
 	if (st->st_ah.present) {
+		bool esn = st->st_esp.attrs.transattrs.esn_enabled;
+
 		lswlogf(buf, "%sAH%s=>0x%08" PRIx32 " <0x%08" PRIx32 " xfrm=%s",
 			ini,
 			st->st_ah.attrs.transattrs.esn_enabled ? "/ESN" : "",
@@ -590,6 +585,12 @@ void lswlog_child_sa_established(struct lswlog *buf, struct state *st)
 			st->st_ah.attrs.transattrs.ta_integ->common.fqn);
 
 		ini = " ";
+
+		pstats_ipsec_ah++;
+		pstatsv(ipsec_integ, st->st_ikev2,
+			st->st_ah.attrs.transattrs.ta_integ->common.id[IKEv1_ESP_ID],
+			st->st_ah.attrs.transattrs.ta_integ->common.id[IKEv2_ALG_ID]);
+		pstats_sa(FALSE, FALSE, esn);
 	}
 
 	if (st->st_ipcomp.present) {
@@ -599,6 +600,8 @@ void lswlog_child_sa_established(struct lswlog *buf, struct state *st)
 			ntohl(st->st_ipcomp.our_spi));
 
 		ini = " ";
+
+		pstats_ipsec_ipcomp++;
 	}
 
 	lswlogs(buf, ini);
@@ -618,11 +621,11 @@ void lswlog_child_sa_established(struct lswlog *buf, struct state *st)
 		snprintf(oa, sizeof(oa),
 			 "%s:%d",
 			 sensitive_ipstr(&st->hidden_variables.st_natd, &ipb),
-			 endpoint_hport(&st->st_remote_endpoint));
+			 st->st_remoteport);
 		lswlogs(buf, oa);
 	}
 
-	lswlogf(buf, (st->st_ike_version == IKEv1 && !st->hidden_variables.st_peer_supports_dpd) ? " DPD=unsupported" :
+	lswlogf(buf, (!st->st_ikev2 && !st->hidden_variables.st_peer_supports_dpd) ? " DPD=unsupported" :
 			dpd_active_locally(st) ? " DPD=active" : " DPD=passive");
 
 	if (st->st_xauth_username[0] != '\0') {
@@ -640,7 +643,7 @@ void lswlog_ike_sa_established(struct lswlog *buf, struct state *st)
 	passert(st->st_oakley.ta_dh != NULL);
 
 	lswlogs(buf, " {auth=");
-	if (st->st_ike_version == IKEv2) {
+	if (st->st_ikev2) {
 		lswlogs(buf, "IKEv2");
 	} else {
 		lswlog_enum_short(buf, &oakley_auth_names, st->st_oakley.auth);
@@ -657,7 +660,7 @@ void lswlog_ike_sa_established(struct lswlog *buf, struct state *st)
 	 * st->st_oakley.ta_integ is 'none'!
 	 */
 	lswlogs(buf, " integ=");
-	if (st->st_ike_version == IKEv2) {
+	if (st->st_ikev2) {
 		if (st->st_oakley.ta_integ == &ike_alg_integ_none) {
 			lswlogs(buf, "n/a");
 		} else {
@@ -672,9 +675,23 @@ void lswlog_ike_sa_established(struct lswlog *buf, struct state *st)
 		lswlogs(buf, st->st_oakley.ta_prf->common.fqn);
 	}
 
-	if (st->st_ike_version == IKEv2) {
+	if (st->st_ikev2) {
 		lswlogf(buf, " prf=%s", st->st_oakley.ta_prf->common.fqn);
 	}
 
 	lswlogf(buf, " group=%s}", st->st_oakley.ta_dh->common.fqn);
+
+	/* keep IKE SA statistics */
+	if (st->st_ikev2) {
+		pstats_ikev2_sa++;
+		pstats(ikev2_encr, st->st_oakley.ta_encrypt->common.id[IKEv2_ALG_ID]);
+		if (st->st_oakley.ta_integ != NULL)
+			pstats(ikev2_integ, st->st_oakley.ta_integ->common.id[IKEv2_ALG_ID]);
+		pstats(ikev2_groups, st->st_oakley.ta_dh->group);
+	} else {
+		pstats_ikev1_sa++;
+		pstats(ikev1_encr, st->st_oakley.ta_encrypt->common.ikev1_oakley_id);
+		pstats(ikev1_integ, st->st_oakley.ta_prf->common.id[IKEv1_OAKLEY_ID]);
+		pstats(ikev1_groups, st->st_oakley.ta_dh->group);
+	}
 }

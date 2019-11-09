@@ -102,11 +102,10 @@ struct option opts[] = {
 static void print(struct private_key_stuff *pks,
 		  int count, struct id *id, bool disclose)
 {
-	id_buf idbuf = { "n/a", };
-	if (id != NULL) {
-		str_id(id, &idbuf);
+	char idb[IDTOA_BUF] = "n/a";
+	if (id) {
+		idtoa(id, idb, IDTOA_BUF);
 	}
-	const char *idb = idbuf.buf;
 
 	char pskbuf[128] = "";
 	if (pks->kind == PKK_PSK || pks->kind == PKK_XAUTH) {
@@ -166,6 +165,7 @@ static void print(struct private_key_stuff *pks,
 	case PKK_INVALID:
 		printf("Invalid or unknown key: %s\n", idb);
 		exit(1);
+
 	}
 }
 

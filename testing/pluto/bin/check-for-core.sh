@@ -2,17 +2,6 @@
 
 DIR=${1:-/tmp}
 
-BT()
-{
-    gdb <<EOF -quiet -nx "$@" 2>&1 | tr -cd '\12\15\40-\176'
-set width 0
-set height 0
-set pagination no
-set charset ASCII
-bt
-EOF
-}
-
 ls ${DIR}/core* 2>/dev/null | while read core ; do
 
     echo
@@ -35,7 +24,7 @@ ls ${DIR}/core* 2>/dev/null | while read core ; do
     # send to stdout
     if test -n "${prog}" ; then
 	echo
-	BT ${prog} ${core}
+	gdb -ex bt  -q -batch  ${prog} ${core}
 	echo
     fi
 
@@ -43,7 +32,7 @@ ls ${DIR}/core* 2>/dev/null | while read core ; do
     if test "${exe}" = "pluto" -a -n "${prog}"; then
 	(
 	    echo
-	    BT ${prog} ${core}
+	    gdb -ex bt  -q -batch  ${prog} ${core}
 	    echo
 	) >> /tmp/pluto.log
     fi

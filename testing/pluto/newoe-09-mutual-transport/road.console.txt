@@ -3,7 +3,7 @@ road #
  cp policies/* /etc/ipsec.d/policies/
 road #
  ipsec start
-Redirecting to: [initsystem]
+Redirecting to: systemctl start ipsec.service
 road #
  /testing/pluto/bin/wait-until-pluto-started
 road #

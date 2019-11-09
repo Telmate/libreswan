@@ -3,7 +3,7 @@
  * Author: JuanJo Ciarlante <jjo-ipsec@mendoza.gov.ar>
  *
  * Copyright (C) 2012 Paul Wouters <paul@libreswan.org>
- * Copyright (C) 2015-2019 Andrew Cagney <cagney@gnu.org>
+ * Copyright (C) 2015-2017 Andrew Cagney
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -22,95 +22,53 @@
 
 #include "lswalloc.h"
 #include "lswlog.h"
-#include "proposals.h"
+#include "alg_info.h"
 #include "alg_byname.h"
 #include "lswfips.h"
 
 #include "ike_alg.h"
 #include "ike_alg_integ.h"
 
-static bool ah_proposal_ok(struct proposal_parser *parser,
-			   const struct proposal *proposal)
+static bool ah_proposal_ok(const struct proposal_parser *parser,
+			   const struct proposal_info *proposal)
 {
-	impaired_passert(PROPOSAL_PARSER,
-			 next_algorithm(proposal, PROPOSAL_encrypt, NULL) == NULL);
-	impaired_passert(PROPOSAL_PARSER,
-			 next_algorithm(proposal, PROPOSAL_prf, NULL) == NULL);
-	impaired_passert(PROPOSAL_PARSER,
-			 next_algorithm(proposal, PROPOSAL_integ, NULL) != NULL);
+	impaired_passert(PROPOSAL_PARSER, proposal->encrypt == NULL);
+	impaired_passert(PROPOSAL_PARSER, proposal->prf == NULL);
+	impaired_passert(PROPOSAL_PARSER, proposal->integ != NULL);
 
 	/* ah=null is invalid */
-	if (!IMPAIR(ALLOW_NULL_NONE)) {
-		FOR_EACH_ALGORITHM(proposal, integ, alg) {
-			/* passerts */
-			const struct integ_desc *integ = integ_desc(alg->desc);
-			if (integ == &ike_alg_integ_none) {
-				proposal_error(parser, "AH cannot have 'none' as the integrity algorithm");
-				if (!impair_proposal_errors(parser)) {
-					return false;
-				}
-			}
+	if (!IMPAIR(ALLOW_NULL_NONE) &&
+	    proposal->integ == &ike_alg_integ_none) {
+		snprintf(parser->err_buf, parser->err_buf_len,
+			 "AH cannot have 'none' as the integrity algorithm");
+		if (!impair_proposal_errors(parser)) {
+			return false;
 		}
 	}
 
 	return true;
 }
 
-/*
- * IKEv1:
- */
-
-static const char default_v1_ah_proposals[] =
-	"SHA1_96" /*???*/
-	;
-
-const struct proposal_defaults v1_ah_defaults = {
-	.proposals = default_v1_ah_proposals,
-};
-
-/*
- * IKEv2:
- */
-
-static const char default_v2_ah_proposals[] =
-	"SHA2_512_256"
-	","
-	"SHA2_256_128"
-	","
-	/*
-	 * something strongswan might accept; bottom of the preference
-	 * list
-	 */
-	"SHA1_96"
-	;
-
-static const struct ike_alg *default_v2_ah_integ[] = {
-#ifdef USE_SHA2
-	&ike_alg_integ_sha2_512.common,
-	&ike_alg_integ_sha2_256.common,
+static const struct ike_alg *default_ah_integ[] = {
+#ifdef USE_SHA1
+	&ike_alg_integ_sha1.common,
 #endif
 	NULL,
 };
 
-const struct proposal_defaults v2_ah_defaults = {
-	.proposals = default_v2_ah_proposals,
-	.integ = default_v2_ah_integ,
+const struct proposal_defaults ah_defaults = {
+	.integ = default_ah_integ,
 };
-
-/*
- * All together now ...
- */
 
 const struct proposal_protocol ah_proposal_protocol = {
 	.name = "AH",
 	.ikev1_alg_id = IKEv1_ESP_ID,
-	.defaults = {
-		[IKEv1] = &v1_ah_defaults,
-		[IKEv2] = &v2_ah_defaults,
-	},
+	.protoid = PROTO_IPSEC_AH,
+	.ikev1_defaults = &ah_defaults,
+	.ikev2_defaults = &ah_defaults,
 	.proposal_ok = ah_proposal_ok,
-	.integ = true,
-	.dh = true,
+	.integ_alg_byname = integ_alg_byname,
+	.dh_alg_byname = dh_alg_byname,
 };
 
 /*
@@ -119,7 +77,7 @@ const struct proposal_protocol ah_proposal_protocol = {
  * parser configuration - encryption isn't allowed.
  *
  * ??? the only difference between
- * ah_proposals_create_from_str and alg_info_esp_create_from_str
+ * alg_info_ah_create_from_str and alg_info_esp_create_from_str
  * is in the second argument to proposal_parser.
  *
  * XXX: On the other hand, since "struct ike_info" and "struct
@@ -129,7 +87,33 @@ const struct proposal_protocol ah_proposal_protocol = {
 
 /* This function is tested in testing/algparse/algparse.c */
 
-struct proposal_parser *ah_proposal_parser(const struct proposal_policy *policy)
+struct alg_info_esp *alg_info_ah_create_from_str(const struct proposal_policy *policy,
+						 const char *alg_str,
+						 char *err_buf, size_t err_buf_len)
 {
-	return alloc_proposal_parser(policy, &ah_proposal_protocol);
+	shunk_t string = shunk1(alg_str);
+	const struct proposal_parser parser = proposal_parser(policy,
+							      &ah_proposal_protocol,
+							      err_buf, err_buf_len);
+
+	/*
+	 * alg_info storage should be sized dynamically
+	 * but this may require two passes to know
+	 * transform count in advance.
+	 */
+	struct alg_info_esp *alg_info_ah = alloc_thing(struct alg_info_esp, "alg_info_ah");
+
+	if (!alg_info_parse_str(&parser, &alg_info_ah->ai, string)) {
+		passert(err_buf[0] != '\0');
+		alg_info_free(&alg_info_ah->ai);
+		return NULL;
+	}
+
+	if (!alg_info_pfs_vs_dh_check(&parser, alg_info_ah)) {
+		passert(err_buf[0] != '\0');
+		alg_info_free(&alg_info_ah->ai);
+		return NULL;
+	}
+
+	return alg_info_ah;
 }

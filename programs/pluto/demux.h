@@ -4,7 +4,7 @@
  * Copyright (C) 2005-2008 Michael Richardson <mcr@xelerance.com>
  * Copyright (C) 2012-2013 Paul Wouters <pwouters@redhat.com>
  * Copyright (C) 2013 Wolfgang Nothdurft <wolfgang@linogate.de>
- * Copyright (C) 2018-2019 Andrew Cagney <cagney@gnu.org>
+ * Copyright (C) 2018 Andrew Cagney
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -24,8 +24,6 @@
 #include "packet.h"
 #include "quirks.h"
 #include "chunk.h"
-#include "ip_address.h"
-#include "pluto_timing.h"
 
 struct state;   /* forward declaration of tag */
 
@@ -58,10 +56,8 @@ extern event_callback_routine comm_handle_cb;
 
 struct payload_digest {
 	pb_stream pbs;
-	/* Use IKEv2 term: "... the payload type" */
-	unsigned payload_type;
 	union payload payload;
-	struct payload_digest *next; /* of same type */
+	struct payload_digest *next; /* of same kind */
 };
 
 struct payload_summary {
@@ -82,7 +78,7 @@ struct msg_digest {
 	struct msg_digest *next;		/* for free list */
 	chunk_t raw_packet;			/* (v1) if encrypted, received packet before decryption */
 	const struct iface_port *iface;		/* interface on which message arrived */
-	ip_endpoint sender;			/* address:port where message came from */
+	ip_address sender;			/* where message came from (network order) */
 	struct isakmp_hdr hdr;			/* message's header */
 	bool encrypted;				/* (v1) was it encrypted? */
 	enum state_kind from_state;		/* state we started in */
@@ -91,16 +87,13 @@ struct msg_digest {
 	bool new_iv_set;			/* (v1) */
 	struct state *st;			/* current state object */
 
-	threadtime_t md_inception;		/* when was this started */
-
 	notification_t v1_note;			/* reason for failure */
 	bool dpd;				/* (v1) Peer supports RFC 3706 DPD */
 	bool ikev2;				/* Peer supports IKEv2 */
 	bool fragvid;				/* (v1) Peer supports FRAGMENTATION */
 	bool nortel;				/* (v1) Peer requires Nortel specific workaround */
 	bool event_already_set;			/* (v1) */
-	bool fake_clone;			/* is this a fake (clone) message */
-	bool fake_dne;				/* created as part of fake_md() */
+	bool fake;				/* is this a fake (clone) message */
 
 	/*
 	 * The packet PBS contains a message PBS and the message PBS
@@ -147,9 +140,7 @@ struct msg_digest {
 	struct isakmp_quirks quirks;
 };
 
-enum ike_version hdr_ike_version(const struct isakmp_hdr *hdr);
 enum message_role v2_msg_role(const struct msg_digest *md);
-
 extern struct msg_digest *alloc_md(const char *mdname);
 struct msg_digest *clone_md(struct msg_digest *md, const char *name);
 extern void release_md(struct msg_digest *md);
@@ -161,7 +152,5 @@ extern void free_md_pool(void);
 extern void process_packet(struct msg_digest **mdp);
 
 extern char *cisco_stringify(pb_stream *pbs, const char *attr_name);
-
-extern void lswlog_msg_digest(struct lswlog *log, const struct msg_digest *md);
 
 #endif /* _DEMUX_H */

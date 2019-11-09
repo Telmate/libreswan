@@ -11,7 +11,7 @@ west #
 Global routes 572
 west #
  ipsec start
-Redirecting to: [initsystem]
+Redirecting to: systemctl start ipsec.service
 west #
  /testing/pluto/bin/wait-until-pluto-started
 west #
@@ -449,8 +449,6 @@ conn: "test" mark-out=<unset>
 conn: "test" vti_iface=<unset>
 conn: "test" redirect-to=<unset>
 conn: "test" accept-redirect-to=<unset>
-conn: "test" esp=<unset>
-conn: "test" ike=<unset>
 002 added connection description "test"
 west #
  # base line check - remove routes and try again

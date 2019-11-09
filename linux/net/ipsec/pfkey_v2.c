@@ -658,6 +658,7 @@ static struct proto key_proto = {
 	.name     = "KEY",
 	.owner    = THIS_MODULE,
 	.obj_size = sizeof(struct sock),
+
 };
 #endif
 #if defined(NET_26_24_SKALLOC) || defined(NET_44_SKALLOC)

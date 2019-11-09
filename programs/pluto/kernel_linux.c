@@ -5,7 +5,6 @@
  * Copyright (C) 2005-2006 Michael Richardson <mcr@xelerance.com>
  * Copyright (C) 2007-2009 Paul Wouters <paul@xelerance.com>
  * Copyright (C) 2008 David McCullough <david_mccullough@securecomputing.com>
- * Copyright (C) 2019 Andrew Cagney <cagney@gnu.org>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -36,6 +35,7 @@
 
 #include <linux/if_addr.h>
 
+#include <libreswan.h>
 
 #include "sysdep.h"
 #include "socketwrapper.h"
@@ -59,7 +59,6 @@
 #include "whack.h"      /* for RC_LOG_SERIOUS */
 #include "keys.h"
 #include "ip_address.h"
-#include "ip_info.h"
 
 #ifdef HAVE_BROKEN_POPEN
 /*
@@ -136,12 +135,14 @@ struct raw_iface *find_raw_ifaces4(void)
 
 	/* bind the socket */
 	{
-		ip_address any = address_any(&ipv4_info);
-		ip_endpoint any_ep = endpoint(&any, pluto_port);
-		ip_sockaddr any_sa;
-		size_t any_sa_size = endpoint_to_sockaddr(&any_ep, &any_sa);
-		if (bind(master_sock, &any_sa.sa, any_sa_size) < 0)
-			EXIT_LOG_ERRNO(errno, "bind() failed in %s()", __func__);
+		ip_address any;
+
+		happy(anyaddr(AF_INET, &any));
+		setportof(htons(pluto_port), &any);
+		if (bind(master_sock, sockaddrof(&any),
+			 sockaddrlenof(&any)) < 0)
+			EXIT_LOG_ERRNO(errno,
+				       "bind() failed in find_raw_ifaces4()");
 	}
 
 	/* a million interfaces is probably the maximum, ever... */
@@ -246,9 +247,15 @@ struct raw_iface *find_raw_ifaces4(void)
 			continue;
 		}
 
-		ri.addr = address_from_in_addr(&rs->sin_addr);
-		ipstr_buf b;
-		dbg("found %s with address %s", ri.name, ipstr(&ri.addr, &b));
+		happy(initaddr((const void *)&rs->sin_addr,
+			       sizeof(struct in_addr),
+			       AF_INET, &ri.addr));
+
+		DBG(DBG_CONTROLMORE, {
+			ipstr_buf b;
+			DBG_log("found %s with address %s",
+				ri.name, ipstr(&ri.addr, &b));
+		});
 		ri.next = rifaces;
 		rifaces = clone_thing(ri, "struct raw_iface");
 	}
@@ -256,76 +263,6 @@ struct raw_iface *find_raw_ifaces4(void)
 	free(buf);	/* was allocated via realloc() */
 	close(master_sock);
 	return rifaces;
-}
-
-static int cmp_iface(const void *lv, const void *rv)
-{
-	const struct raw_iface *const *ll = lv;
-	const struct raw_iface *const *rr = rv;
-	const struct raw_iface *l = *ll;
-	const struct raw_iface *r = *rr;
-	/* return l - r */
-	int i;
-	/* protocol */
-	i = addrtypeof(&l->addr) - addrtypeof(&r->addr);
-	if (i != 0) {
-		return i;
-	}
-	/* loopback=0 < addr=1 < any=2 < invalid */
-#define SCORE(I) (address_is_loopback(&I->addr) ? 0			\
-		  : address_is_specified(&I->addr) ? 1			\
-		  : address_is_any(&I->addr) ? 2			\
-		  : 3/*invalid*/)
-	i = SCORE(l) - SCORE(r);
-	if (i != 0) {
-		return i;
-	}
-#undef SCORE
-	/* name */
-	i = strcmp(l->name, r->name);
-	if (i != 0) {
-		return i;
-	}
-	/* address */
-	i = addrcmp(&l->addr, &r->addr);
-	if (i != 0) {
-		return i;
-	}
-	/* Interface addresses don't have ports. */
-	/* what else */
-	dbg("interface sort not stable or duplicate");
-	return 0;
-}
-
-static void sort_ifaces(struct raw_iface **rifaces)
-{
-	/* how many? */
-	unsigned nr_ifaces = 0;
-	for (struct raw_iface *i = *rifaces; i != NULL; i = i->next) {
-		nr_ifaces++;
-	}
-	if (nr_ifaces == 0) {
-		dbg("no interfaces to sort");
-		return;
-	}
-	/* turn the list into an array */
-	struct raw_iface **ifaces = alloc_things(struct raw_iface *, nr_ifaces,
-						 "ifaces for sorting");
-	ifaces[0] = *rifaces;
-	for (unsigned i = 1; i < nr_ifaces; i++) {
-		ifaces[i] = ifaces[i-1]->next;
-	}
-	/* sort */
-	dbg("sorting %u interfaces", nr_ifaces);
-	qsort(ifaces, nr_ifaces, sizeof(ifaces[0]), cmp_iface);
-	/* turn the array back into a list */
-	for (unsigned i = 0; i < nr_ifaces - 1; i++) {
-		ifaces[i]->next = ifaces[i+1];
-	}
-	ifaces[nr_ifaces-1]->next = NULL;
-	/* clean up and return */
-	*rifaces = ifaces[0];
-	pfree(ifaces);
 }
 
 struct raw_iface *find_raw_ifaces6(void)
@@ -401,24 +338,15 @@ struct raw_iface *find_raw_ifaces6(void)
 
 			happy(ttoaddr_num(sb, 0, AF_INET6, &ri.addr));
 
-			if (address_is_specified(&ri.addr)) {
-				dbg("found %s with address %s",
-				    ri.name, sb);
+			if (!isunspecaddr(&ri.addr)) {
+				DBG(DBG_CONTROL,
+				    DBG_log("found %s with address %s",
+					    ri.name, sb));
 				ri.next = rifaces;
 				rifaces = clone_thing(ri, "struct raw_iface");
 			}
 		}
 		fclose(proc_sock);
-		/*
-		 * Sort the list by IPv6 address in assending order.
-		 *
-		 * XXX: The code then inserts these interfaces in
-		 * _reverse_ order (why I don't know) - the loop-back
-		 * interface ends up last.  Should the insert code
-		 * (scattered between kernel_*.c files) instead
-		 * maintain the "interfaces" structure?
-		 */
-		sort_ifaces(&rifaces);
 	}
 
 	return rifaces;

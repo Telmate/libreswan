@@ -8,7 +8,7 @@
  * Copyright (C) 2012 Wes Hardaker <opensource@hardakers.net>
  * Copyright (C) 2013 Tuomo Soini <tis@foobar.fi>
  * Copyright (C) 2013 D. Hugh Redelmeier <hugh@mimosa.com>
- * Copyright (C) 2015-2019 Andrew Cagney <cagney@gnu.org>
+ * Copyright (C) 2015 Andrew Cagney <andrew.cagney@gmail.com>
  * Copyright (C) 2015 Paul Wouters <pwouters@redhat.com>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -45,40 +45,9 @@ struct state;
 struct msg_digest;
 
 /*
- * Offload work to the crypto thread pool (or the event loop if there
- * are no threads).
- *
- * XXX: MDP should be just MD.  Per IKEv2, the only code squiriling
- * away MDP should be in complete_v[12]_state_transition() when
- * STF_SUSPEND is returned.  Unfortunately, IKEv1 isn't there and
- * probably never will :-(
- */
-
-struct crypto_task;
-
-typedef void crypto_compute_fn(struct crypto_task *task, int my_thread);
-typedef stf_status crypto_completed_cb(struct state *st,
-				       struct msg_digest **mdp,
-				       struct crypto_task **task);
-typedef void crypto_cancelled_cb(struct crypto_task **task);
-
-struct crypto_handler {
-	const char *name;
-	crypto_compute_fn *compute_fn;
-	crypto_completed_cb *completed_cb;
-	crypto_cancelled_cb *cancelled_cb;
-};
-
-extern void submit_crypto(struct state *st,
-		   struct crypto_task *task,
-		   const struct crypto_handler *handler,
-		   const char *name);
-
-/*
  * cryptographic helper operations.
  */
 enum pluto_crypto_requests {
-	pcr_crypto = 0,		/* using crypto_handler */
 	pcr_build_ke_and_nonce,	/* calculate g^i and generate a nonce */
 	pcr_build_nonce,	/* generate a nonce */
 	pcr_compute_dh_iv,	/* calculate (g^x)(g^y) and skeyids for Phase 1 DH + prf */
@@ -183,7 +152,7 @@ extern void wire_clone_chunk(wire_arena_t *arena,
 /* query and response */
 struct pcr_kenonce {
 	/* inputs */
-	const struct dh_desc *group;
+	const struct oakley_group_desc *group;
 
 	/* outputs */
 	struct dh_secret *secret;
@@ -197,7 +166,7 @@ struct pcr_v1_dh {
 	DECLARE_WIRE_ARENA(DHCALC_SIZE);
 
 	/* query */
-	const struct dh_desc *oakley_group;
+	const struct oakley_group_desc *oakley_group;
 	oakley_auth_t auth; /*IKEv1 AUTH*/
 	const struct integ_desc *integ;
 	const struct prf_desc *prf;
@@ -231,7 +200,7 @@ struct pcr_dh_v2 {
 	/* incoming */
 	DECLARE_WIRE_ARENA(DHCALC_SIZE);
 
-	const struct dh_desc *dh;
+	const struct oakley_group_desc *dh;
 	const struct integ_desc *integ;
 	const struct prf_desc *prf;
 	const struct encrypt_desc *encrypt;
@@ -340,7 +309,7 @@ extern void send_crypto_helper_request(struct state *st,
 
 extern void request_ke_and_nonce(const char *name,
 				 struct state *st,
-				 const struct dh_desc *group,
+				 const struct oakley_group_desc *group,
 				 crypto_req_cont_func *callback);
 
 extern void request_nonce(const char *name,
@@ -358,25 +327,24 @@ extern void cancelled_ke_and_nonce(struct pcr_kenonce *kn);
  */
 
 extern void compute_dh_shared(struct state *st, const chunk_t g,
-			      const struct dh_desc *group);
+			      const struct oakley_group_desc *group);
 
 extern void start_dh_v1_secretiv(crypto_req_cont_func fn, const char *name,
 				 struct state *st, enum original_role role,
-				 const struct dh_desc *oakley_group2);
+				 const struct oakley_group_desc *oakley_group2);
 
 extern bool finish_dh_secretiv(struct state *st,
 			       struct pluto_crypto_req *r);
 
 extern void start_dh_v1_secret(crypto_req_cont_func fn, const char *name,
 			       struct state *st, enum original_role role,
-			       const struct dh_desc *oakley_group2);
+			       const struct oakley_group_desc *oakley_group2);
 
 extern void finish_dh_secret(struct state *st,
 			     struct pluto_crypto_req *r);
 
-/* internal */
 extern void calc_dh(struct pcr_v1_dh *dh);
-extern void calc_dh_iv(struct pcr_v1_dh *dh);
+
 extern void cancelled_v1_dh(struct pcr_v1_dh *dh);
 
 /*
@@ -394,8 +362,6 @@ extern void start_dh_v2(struct state *st,
 extern bool finish_dh_v2(struct state *st,
 			 struct pluto_crypto_req *r, bool only_shared);
 
-/* internal */
-extern void calc_dh_v2(struct pluto_crypto_req *r);
 extern void cancelled_dh_v2(struct pcr_dh_v2 *dh);
 
 /*
@@ -408,7 +374,7 @@ extern void unpack_KE_from_helper(struct state *st,
 
 void pcr_kenonce_init(struct pluto_crypto_req_cont *cn,
 		      enum pluto_crypto_requests pcr_type,
-		      const struct dh_desc *dh);
+		      const struct oakley_group_desc *dh);
 
 struct pcr_v1_dh *pcr_v1_dh_init(struct pluto_crypto_req_cont *cn,
 				 enum pluto_crypto_requests pcr_type);

@@ -1,6 +1,6 @@
 /* lset modifiers, for libreswan
  *
- * Copyright (C) 2017-2019 Andrew Cagney <cagney@gnu.org>
+ * Copyright (C) 2017 Andrew Cagney
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -53,7 +53,7 @@ struct lmod_info {
 };
 
 bool lmod_arg(lmod_t *mod, const struct lmod_info *info,
-	      const char *optarg, bool enable);
+	      const char *optarg);
 
 void lswlog_lmod(struct lswlog *buf, const enum_names *names,
 		 const char *separator, lmod_t mod);

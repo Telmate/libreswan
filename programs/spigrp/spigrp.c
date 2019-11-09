@@ -2,8 +2,6 @@
  * SA grouping
  * Copyright (C) 1996  John Ioannidis.
  * Copyright (C) 1997, 1998, 1999, 2000, 2001  Richard Guy Briggs.
- * Copyright (C) 2019 Andrew Cagney <cagney@gnu.org>
- * Copyright (C) 2019 Paul Wouters <pwouters@redhat.com>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -50,9 +48,6 @@
 #include "libreswan/ipsec_ah.h"
 
 #include "ip_address.h"
-#include "ip_said.h"
-#include "ip_endpoint.h"
-#include "ip_info.h"
 
 const char *progname;
 
@@ -97,6 +92,7 @@ int main(int argc, char **argv)
 	int i, nspis;
 	int said_opt = 0;
 
+	const char *error_s = NULL;
 	int j;
 	struct said_af said_af_array[4];
 
@@ -107,7 +103,6 @@ int main(int argc, char **argv)
 	struct sadb_msg *pfkey_msg;
 
 	progname = argv[0];
-
 	zero(&said_af_array);	/* OK: no pointer fields */
 
 	if (argc > 1 && streq(argv[1], "--debug")) {
@@ -116,7 +111,7 @@ int main(int argc, char **argv)
 			fprintf(stdout, "\"--debug\" option requested.\n");
 		argv += 1;
 		argc -= 1;
-		cur_debugging = DBG_BASE;
+		pfkey_lib_debug = PF_KEY_DEBUG_PARSE_MAX;
 	}
 
 	if (debug) {
@@ -152,6 +147,13 @@ int main(int argc, char **argv)
 
 	if (debug)
 		fprintf(stdout, "...After check for --label option.\n");
+
+	if (stat("/proc/net/pfkey", &sts) == 0) {
+		fprintf(stderr,
+			"%s: NETKEY does not use the ipsec spigrp command. Use 'ip xfrm' instead.\n",
+			progname);
+		exit(1);
+	}
 
 	if (argc == 1) {
 		int ret = 1;
@@ -232,15 +234,16 @@ int main(int argc, char **argv)
 			fprintf(stdout, "processing spi #%d.\n", i);
 
 		if (said_opt) {
-			err_t e = ttosa((const char *)argv[i + 2], 0,
+			error_s = ttosa((const char *)argv[i + 2], 0,
 					(ip_said*)&(said_af_array[i].said));
-			if (e != NULL) {
+			if (error_s != NULL) {
 				fprintf(stderr,
 					"%s: Error, %s converting --sa argument:%s\n",
-					progname, e, argv[i + 2]);
+					progname, error_s, argv[i + 2]);
 				exit(1);
 			}
-			said_af_array[i].af = said_type(&(said_af_array[i].said))->af;
+			said_af_array[i].af =
+				addrtypeof(&(said_af_array[i].said.dst));
 			if (debug) {
 				ipstr_buf b;
 
@@ -256,13 +259,13 @@ int main(int argc, char **argv)
 			 * +3: proto
 			 */
 			char **p = &argv[i * 4 + 1];
-			const struct ip_info *af;
+			int af;
 
 			/* address family */
 			if (streq(p[0], "inet")) {
-				af = &ipv4_info;
+				af = AF_INET;
 			} else if (streq(p[0], "inet6")) {
-				af = &ipv6_info;
+				af = AF_INET6;
 			} else {
 				fprintf(stderr,
 					"%s: Address family %s not supported\n",
@@ -272,13 +275,14 @@ int main(int argc, char **argv)
 
 			/* IP address */
 			{
-				err_t e = domain_to_address(shunk1(p[1]), af,
-							    &(said_af_array[i].said.dst));
+				err_t error_s = ttoaddr(p[1], 0,
+						  af,
+						  &(said_af_array[i].said.dst));
 
-				if (e != NULL) {
+				if (error_s != NULL) {
 					fprintf(stderr,
 						"%s: Error, %s converting %dth address argument:%s\n",
-						progname, e, i, p[1]);
+						progname, error_s, i, p[1]);
 					exit(1);
 				}
 			}
@@ -316,8 +320,8 @@ int main(int argc, char **argv)
 
 			fprintf(stdout, "SA %d contains: ", i + 1);
 			fprintf(stdout, "\n");
-			fprintf(stdout, "proto = %s\n",
-				said_af_array[i].said.proto->name);
+			fprintf(stdout, "proto = %d\n",
+				said_af_array[i].said.proto);
 			fprintf(stdout, "spi = %08x\n",
 				said_af_array[i].said.spi);
 			fprintf(stdout, "edst = %s\n", ipstr(&said_af_array[i].said.dst, &b));
@@ -366,8 +370,8 @@ int main(int argc, char **argv)
 			} else {
 				if (debug) {
 					fprintf(stdout,
-						"setting x_satype proto=%s satype=%d\n",
-						said_af_array[i + j].said.proto->name,
+						"setting x_satype proto=%d satype=%d\n",
+						said_af_array[i + j].said.proto,
 						proto2satype(said_af_array[i +
 									   j].
 							     said.proto)
@@ -415,12 +419,9 @@ int main(int argc, char **argv)
 			{
 				uint16_t x = j == 0 ? SADB_EXT_ADDRESS_DST : SADB_X_EXT_ADDRESS_DST2;
 
-				/* force port to 0 */
-				ip_endpoint said_dst_e = endpoint(&said_af_array[i + j].said.dst, 0);
-				ip_sockaddr said_dst_sa;
-				passert(endpoint_to_sockaddr(&said_dst_e, &said_dst_sa) > 0);
-				error = pfkey_address_build(&extensions[x], x, 0, 0,
-							    &said_dst_sa.sa);
+				error = pfkey_address_build(
+					&extensions[x], x, 0, 0,
+					sockaddrof(&said_af_array[i + j].said.dst));
 			}
 
 			if (error) {
@@ -434,6 +435,7 @@ int main(int argc, char **argv)
 				pfkey_extensions_free(extensions);
 				exit(1);
 			}
+
 		}
 
 		if ((error = pfkey_msg_build(&pfkey_msg, extensions,

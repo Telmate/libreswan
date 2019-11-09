@@ -1,17 +1,12 @@
 # [  111.628924] -> [ 00.00]
 s/^\[\s\+[0-9]\+.[0-9]\+\] /\[ 00.00] /
 
-# XXX: Can kernel messages be split across two lines?
-
 # seemingly kernel messages end with ^M?
 /^\[ 00.00] .*/ {
   / audit:/d
   / kauditd_printk_skb:/d
   / Netfilter messages via NETLINK/d
-  / IPsec XFRM device driver/d
 }
-
-# XXX: how many of these are still generated?
 
 /tracing thread pid = \(.*\)/d
 s/spawn \(.*\) single/spawn PATH single/
@@ -128,5 +123,3 @@ s/ FLOWLBL=[0-9]* / FLOWLBL=XXXXX /g
 /^.*SELinux: unrecognized netlink message.*$/d
 /^.*clocksource.*$/d
 s/ qlen 1000$//
-/^type=PROCTITLE.*$/d
-/^\[ 00.00\] IN=.*$/d

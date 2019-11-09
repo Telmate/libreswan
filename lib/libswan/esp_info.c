@@ -3,7 +3,7 @@
  * Author: JuanJo Ciarlante <jjo-ipsec@mendoza.gov.ar>
  *
  * Copyright (C) 2012 Paul Wouters <paul@libreswan.org>
- * Copyright (C) 2015-2019 Andrew Cagney <cagney@gnu.org>
+ * Copyright (C) 2015-2018 Andrew Cagney
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -22,7 +22,7 @@
 
 #include "lswalloc.h"
 #include "lswlog.h"
-#include "proposals.h"
+#include "alg_info.h"
 #include "alg_byname.h"
 #include "lswfips.h"
 
@@ -33,8 +33,8 @@
 /*
  * Add ESP alg info _with_ logic (policy):
  */
-static bool esp_proposal_ok(struct proposal_parser *parser,
-			    const struct proposal *proposal)
+static bool esp_proposal_ok(const struct proposal_parser *parser,
+			    const struct proposal_info *proposal)
 {
 	if (!proposal_aead_none_ok(parser, proposal)) {
 		if (!impair_proposal_errors(parser)) {
@@ -42,85 +42,46 @@ static bool esp_proposal_ok(struct proposal_parser *parser,
 		}
 	}
 
-	impaired_passert(PROPOSAL_PARSER,
-			 next_algorithm(proposal, PROPOSAL_encrypt, NULL) != NULL);
-	impaired_passert(PROPOSAL_PARSER,
-			 next_algorithm(proposal, PROPOSAL_prf, NULL) == NULL);
-	impaired_passert(PROPOSAL_PARSER,
-			 next_algorithm(proposal, PROPOSAL_integ, NULL) != NULL);
+	impaired_passert(PROPOSAL_PARSER, proposal->encrypt != NULL);
+	impaired_passert(PROPOSAL_PARSER, proposal->prf == NULL);
+	impaired_passert(PROPOSAL_PARSER, proposal->integ != NULL);
 	return true;
 }
 
-/*
- * IKEv1:
- *
- * since esp= must have an encryption algorithm this is normally
- * ignored.
- */
+static const struct ike_alg *default_esp_encrypt[] = {
+#ifdef USE_AES
+	&ike_alg_encrypt_aes_cbc.common,
+#endif
+	NULL,
+};
 
-static const char default_v1_esp_proposals[] =
-	"AES_CBC" /*????*/
-	;
-
-static const struct ike_alg *default_v1_esp_integ[] = {
+static const struct ike_alg *default_esp_integ[] = {
 #ifdef USE_SHA1
 	&ike_alg_integ_sha1.common,
 #endif
 	NULL,
 };
 
-static const struct proposal_defaults v1_esp_defaults = {
-	.proposals = default_v1_esp_proposals,
-	.integ = default_v1_esp_integ,
+static const struct proposal_defaults esp_defaults = {
+	.encrypt = default_esp_encrypt,
+	.integ = default_esp_integ,
 };
-
-/*
- * IKEv2:
- */
-
-static const char default_v2_esp_proposals[] =
-	"AES_GCM_16_256"
-	","
-	"AES_GCM_16_128"
-	","
-	"AES_CBC_256"
-	","
-	"AES_CBC_128"
-	;
-
-static const struct ike_alg *default_v2_esp_integ[] = {
-#ifdef USE_SHA2
-	&ike_alg_integ_sha2_512.common,
-	&ike_alg_integ_sha2_256.common,
-#endif
-	NULL,
-};
-
-static const struct proposal_defaults v2_esp_defaults = {
-	.proposals = default_v2_esp_proposals,
-	.integ = default_v2_esp_integ,
-};
-
-/*
- * All together now ...
- */
 
 static const struct proposal_protocol esp_proposal_protocol = {
 	.name = "ESP",
 	.ikev1_alg_id = IKEv1_ESP_ID,
-	.defaults = {
-		[IKEv1] = &v1_esp_defaults,
-		[IKEv2] = &v2_esp_defaults,
-	},
+	.protoid = PROTO_IPSEC_ESP,
+	.ikev1_defaults = &esp_defaults,
+	.ikev2_defaults = &esp_defaults,
 	.proposal_ok = esp_proposal_ok,
-	.encrypt = true,
-	.integ = true,
-	.dh = true,
+	.encrypt_alg_byname = encrypt_alg_byname,
+	.integ_alg_byname = integ_alg_byname,
+	.dh_alg_byname = dh_alg_byname,
 };
 
 /*
  * ??? the only difference between
- * alg_info_ah_create_from_str and esp_proposals_create_from_str
+ * alg_info_ah_create_from_str and alg_info_esp_create_from_str
  * is in the second argument to proposal_parser.
  *
  * XXX: On the other hand, since "struct ike_info" and "struct
@@ -130,7 +91,33 @@ static const struct proposal_protocol esp_proposal_protocol = {
 
 /* This function is tested in testing/algparse/algparse.c */
 
-struct proposal_parser *esp_proposal_parser(const struct proposal_policy *policy)
+struct alg_info_esp *alg_info_esp_create_from_str(const struct proposal_policy *policy,
+						  const char *alg_str,
+						  char *err_buf, size_t err_buf_len)
 {
-	return alloc_proposal_parser(policy, &esp_proposal_protocol);
+	shunk_t string = shunk1(alg_str);
+	const struct proposal_parser parser = proposal_parser(policy,
+							      &esp_proposal_protocol,
+							      err_buf, err_buf_len);
+
+	/*
+	 * alg_info storage should be sized dynamically
+	 * but this may require two passes to know
+	 * transform count in advance.
+	 */
+	struct alg_info_esp *alg_info_esp = alloc_thing(struct alg_info_esp,
+							"alg_info_esp");
+	if (!alg_info_parse_str(&parser, &alg_info_esp->ai, string)) {
+		passert(err_buf[0] != '\0');
+		alg_info_free(&alg_info_esp->ai);
+		return NULL;
+	}
+
+	if (!alg_info_pfs_vs_dh_check(&parser, alg_info_esp)) {
+		passert(err_buf[0] != '\0');
+		alg_info_free(&alg_info_esp->ai);
+		return NULL;
+	}
+
+	return alg_info_esp;
 }

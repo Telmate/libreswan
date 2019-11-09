@@ -6,12 +6,12 @@
  * Copyright (C) 2006-2012 Paul Wouters <paul@xelerance.com>
  * Copyright (C) 2010 Michael Smith <msmith@cbnco.com>
  * Copyright (C) 2010 Tuomo Soini <tis@foobar.fi>
- * Copyright (C) 2012-2019 Paul Wouters <pwouters@redhat.com>
+ * Copyright (C) 2012-2018 Paul Wouters <pwouters@redhat.com>
  * Copyright (C) 2012 Avesh Agarwal <avagarwa@redhat.com>
  * Copyright (C) 2012 Antony Antony <antony@phenome.org>
  * Copyright (C) 2013 Florian Weimer <fweimer@redhat.com>
  * Copyright (C) 2013 David McCullough <ucdevel@gmail.com>
- * Copyright (C) 2013-2019 D. Hugh Redelmeier <hugh@mimosa.com>
+ * Copyright (C) 2013,2018 D. Hugh Redelmeier <hugh@mimosa.com>
  * Copyright (C) 2016 Andrew Cagney <cagney@gnu.org>
  * Copyright (C) 2017-2018 Vukasin Karadzic <vukasin.karadzic@gmail.com>
  *
@@ -30,12 +30,12 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+#include <limits.h>
 #include <assert.h>
-#include <ctype.h>
+#include <sys/queue.h>
 
 #include "lswalloc.h"
 #include "ip_address.h"
-#include "ip_info.h"
 
 #include "ipsecconf/confread.h"
 #include "ipsecconf/starterlog.h"
@@ -46,8 +46,19 @@
 
 #include "whack.h" /* for DEFAULT_CTL_SOCKET */
 
+/*
+ * A policy-only conn means that we load it, and do the appropriate firewalling
+ * to make sure that no packets get out that this conn would apply to, but we
+ * refuse to negotiate it in any way, either incoming or outgoing.
+ */
+#define POLICY_ONLY_CONN(conn) { \
+		if ((conn)->options[KBF_AUTO] > STARTUP_ONDEMAND) \
+			(conn)->options[KBF_AUTO] = STARTUP_POLICY; \
+	}
+
 #ifdef USE_DNSSEC
 # include <unbound.h>
+# include <errno.h>
 # include <arpa/inet.h> /* for inet_ntop */
 # include "dnssec.h"
 #endif /* USE_DNSSEC */
@@ -58,149 +69,128 @@
  * @param cfg starter_config struct
  * @return void
  */
-static void ipsecconf_default_values(struct starter_config *cfg)
+void ipsecconf_default_values(struct starter_config *cfg)
 {
 	static const struct starter_config empty_starter_config;	/* zero or null everywhere */
 	*cfg = empty_starter_config;
 
 	TAILQ_INIT(&cfg->conns);
 
-	/* ==== config setup ==== */
+	/* config setup */
+	cfg->setup.options[KBF_FRAGICMP] = FALSE; /* see sysctl_ipsec_icmp in ipsec_proc.c */
+	cfg->setup.options[KBF_HIDETOS] = TRUE;
+	cfg->setup.options[KBF_PLUTOSTDERRLOGTIME] = TRUE;
+	cfg->setup.options[KBF_PLUTOSTDERRLOGAPPEND] = TRUE;
+	cfg->setup.options[KBF_PLUTOSTDERRLOGIP] = TRUE;
+	cfg->setup.options[KBF_UNIQUEIDS] = TRUE;
+	cfg->setup.options[KBF_DO_DNSSEC] = TRUE;
+	cfg->setup.options[KBF_PERPEERLOG] = FALSE;
+	cfg->setup.options[KBF_IKEPORT] = IKE_UDP_PORT;
+	cfg->setup.options[KBF_IKEBUF] = IKE_BUF_AUTO;
+	cfg->setup.options[KBF_IKE_ERRQUEUE] = TRUE;
+	cfg->setup.options[KBF_NFLOG_ALL] = 0; /* disabled per default */
+	cfg->setup.options[KBF_XFRMLIFETIME] = 300; /* not used by pluto itself */
+	cfg->setup.options[KBF_NHELPERS] = -1; /* see also plutomain.c */
 
-# define SOPT(kbf, v)  { cfg->setup.options[kbf] = (v) ; }
-
-	SOPT(KBF_FRAGICMP, FALSE); /* see sysctl_ipsec_icmp in ipsec_proc.c */
-	SOPT(KBF_HIDETOS, TRUE);
-	SOPT(KBF_LOGTIME, TRUE);
-	SOPT(KBF_LOGAPPEND, TRUE);
-	SOPT(KBF_LOGIP, TRUE);
-	SOPT(KBF_AUDIT_LOG, TRUE);
-	SOPT(KBF_UNIQUEIDS, TRUE);
-	SOPT(KBF_DO_DNSSEC, TRUE);
-	SOPT(KBF_PERPEERLOG, FALSE);
-	SOPT(KBF_IKEPORT, IKE_UDP_PORT);
-	SOPT(KBF_IKEBUF, IKE_BUF_AUTO);
-	SOPT(KBF_IKE_ERRQUEUE, TRUE);
-	SOPT(KBF_NFLOG_ALL, 0); /* disabled per default */
-	SOPT(KBF_XFRMLIFETIME, XFRM_LIFETIME_DEFAULT); /* not used by pluto itself */
-	SOPT(KBF_NHELPERS, -1); /* see also plutomain.c */
-
-	SOPT(KBF_KEEPALIVE, 0);                  /* config setup */
-	SOPT(KBF_NATIKEPORT, NAT_IKE_UDP_PORT);
-	SOPT(KBF_DDOS_IKE_THRESHOLD, DEFAULT_IKE_SA_DDOS_THRESHOLD);
-	SOPT(KBF_MAX_HALFOPEN_IKE, DEFAULT_MAXIMUM_HALFOPEN_IKE_SA);
-	SOPT(KBF_SHUNTLIFETIME, PLUTO_SHUNT_LIFE_DURATION_DEFAULT);
+	cfg->setup.options[KBF_KEEPALIVE] = 0;                  /* config setup */
+	cfg->setup.options[KBF_NATIKEPORT] = NAT_IKE_UDP_PORT;
+	cfg->setup.options[KBF_DDOS_IKE_THRESHOLD] = DEFAULT_IKE_SA_DDOS_THRESHOLD;
+	cfg->setup.options[KBF_MAX_HALFOPEN_IKE] = DEFAULT_MAXIMUM_HALFOPEN_IKE_SA;
+	cfg->setup.options[KBF_SHUNTLIFETIME] = PLUTO_SHUNT_LIFE_DURATION_DEFAULT;
 	/* Don't inflict BSI requirements on everyone */
-	SOPT(KBF_SEEDBITS, 0);
-	SOPT(KBF_DROP_OPPO_NULL, FALSE);
-
-#ifdef HAVE_LABELED_IPSEC
-	SOPT(KBF_SECCTX, SECCTX);
-#endif
-	SOPT(KBF_DDOS_MODE, DDOS_AUTO);
-
-	SOPT(KBF_OCSP_CACHE_SIZE, OCSP_DEFAULT_CACHE_SIZE);
-	SOPT(KBF_OCSP_CACHE_MIN, OCSP_DEFAULT_CACHE_MIN_AGE);
-	SOPT(KBF_OCSP_CACHE_MAX, OCSP_DEFAULT_CACHE_MAX_AGE);
-	SOPT(KBF_OCSP_METHOD, OCSP_METHOD_GET);
-	SOPT(KBF_OCSP_TIMEOUT, OCSP_DEFAULT_TIMEOUT);
-
-	SOPT(KBF_SECCOMP, SECCOMP_DISABLED); /* will be enabled in the future */
-
-# undef SOPT
+	cfg->setup.options[KBF_SEEDBITS] = 0;
+	cfg->setup.options[KBF_DROP_OPPO_NULL] = FALSE;
 
 	cfg->setup.strings[KSF_PLUTO_DNSSEC_ROOTKEY_FILE] = clone_str(DEFAULT_DNSSEC_ROOTKEY_FILE, "dnssec rootkey file");
 
-	/* ==== end of config setup ==== */
+#ifdef HAVE_LABELED_IPSEC
+	cfg->setup.options[KBF_SECCTX] = SECCTX;
+#endif
+	cfg->setup.options[KBF_DDOS_MODE] = DDOS_AUTO;
 
-	cfg->ctlsocket = clone_str(DEFAULT_CTL_SOCKET, "default control socket");
+	cfg->setup.options[KBF_OCSP_CACHE_SIZE] = OCSP_DEFAULT_CACHE_SIZE;
+	cfg->setup.options[KBF_OCSP_CACHE_MIN] = OCSP_DEFAULT_CACHE_MIN_AGE;
+	cfg->setup.options[KBF_OCSP_CACHE_MAX] = OCSP_DEFAULT_CACHE_MAX_AGE;
+	cfg->setup.options[KBF_OCSP_METHOD] = OCSP_METHOD_GET;
+	cfg->setup.options[KBF_OCSP_TIMEOUT] = OCSP_DEFAULT_TIMEOUT;
 
-	/* ==== conn %default ==== */
+	cfg->setup.options[KBF_SECCOMP] = SECCOMP_DISABLED; /* will be enabled in the future */
 
-	struct starter_conn *d = &cfg->conn_default;
+	/* conn %default */
+	cfg->conn_default.options[KBF_NAT_KEEPALIVE] = TRUE;    /* per conn */
+	cfg->conn_default.options[KBF_TYPE] = KS_TUNNEL;
 
-# define DOPT(kbf, v)  { d->options[kbf] = (v); }
+	cfg->conn_default.options[KBF_INITIAL_CONTACT] = FALSE;
+	cfg->conn_default.options[KBF_CISCO_UNITY] = FALSE;
+	cfg->conn_default.options[KBF_NO_ESP_TFC] = FALSE;
+	cfg->conn_default.options[KBF_VID_STRONGSWAN] = FALSE;
+	cfg->conn_default.options[KBF_SEND_VENDORID] = FALSE;
 
-	DOPT(KNCF_NAT_KEEPALIVE, TRUE);    /* per conn */
-	DOPT(KNCF_TYPE, KS_TUNNEL);
+	cfg->conn_default.options[KBF_REMOTEPEERTYPE] = NON_CISCO;
 
-	DOPT(KNCF_INITIAL_CONTACT, FALSE);
-	DOPT(KNCF_CISCO_UNITY, FALSE);
-	DOPT(KNCF_NO_ESP_TFC, FALSE);
-	DOPT(KNCF_VID_STRONGSWAN, FALSE);
-	DOPT(KNCF_SEND_VENDORID, FALSE);
+	cfg->conn_default.options[KBF_IKEPAD] = TRUE;
 
-	DOPT(KNCF_REMOTEPEERTYPE, NON_CISCO);
-
-	DOPT(KNCF_IKEPAD, TRUE);
-
-	DOPT(KNCF_IKEV1_NATT, NATT_BOTH);
-	DOPT(KNCF_ENCAPS, yna_auto);
+	cfg->conn_default.options[KBF_IKEV1_NATT] = NATT_BOTH;
+	cfg->conn_default.options[KBF_ENCAPS] = yna_auto;
 
 	/* Network Manager support */
 #ifdef HAVE_NM
-	DOPT(KNCF_NMCONFIGURED, FALSE);
+	cfg->conn_default.options[KBF_NMCONFIGURED] = FALSE;
 #endif
 
-	DOPT(KNCF_XAUTHBY, XAUTHBY_FILE);
-	DOPT(KNCF_XAUTHFAIL, XAUTHFAIL_HARD);
+#ifdef HAVE_LABELED_IPSEC
+	cfg->conn_default.options[KBF_LABELED_IPSEC] = FALSE;
+#endif
 
-	DOPT(KNCF_NIC_OFFLOAD, yna_auto);
-	DOPT(KNCF_IKELIFETIME, IKE_SA_LIFETIME_DEFAULT);
+	cfg->conn_default.options[KBF_XAUTHBY] = XAUTHBY_FILE;
+	cfg->conn_default.options[KBF_XAUTHFAIL] = XAUTHFAIL_HARD;
 
-	DOPT(KNCF_REPLAY_WINDOW, IPSEC_SA_DEFAULT_REPLAY_WINDOW);
-
-	DOPT(KNCF_RETRANSMIT_TIMEOUT, RETRANSMIT_TIMEOUT_DEFAULT);
-	DOPT(KNCF_RETRANSMIT_INTERVAL_MS, RETRANSMIT_INTERVAL_DEFAULT_MS);
-
-	DOPT(KNCF_SALIFETIME, IPSEC_SA_LIFETIME_DEFAULT);
-	DOPT(KNCF_REKEYMARGIN, SA_REPLACEMENT_MARGIN_DEFAULT);
-	DOPT(KNCF_REKEYFUZZ, SA_REPLACEMENT_FUZZ_DEFAULT);
-
-	DOPT(KNCF_KEYINGTRIES, SA_REPLACEMENT_RETRIES_DEFAULT);
-
-	DOPT(KNCF_HOSTADDRFAMILY, AF_UNSPEC);
-	DOPT(KNCF_CLIENTADDRFAMILY, AF_UNSPEC);
-
-	DOPT(KNCF_AUTO, STARTUP_IGNORE);
-
-# undef DOPT
-
-	d->policy =
+	cfg->conn_default.policy =
 		POLICY_TUNNEL |
-		POLICY_ECDSA | POLICY_RSASIG | POLICY_RSASIG_v1_5 | /* authby= */
 		POLICY_ENCRYPT | POLICY_PFS |
 		POLICY_IKEV2_ALLOW |
 		POLICY_SAREF_TRACK |         /* sareftrack=yes */
 		POLICY_IKE_FRAG_ALLOW |      /* ike_frag=yes */
 		POLICY_ESN_NO;      	     /* esn=no */
 
-	d->sighash_policy =
-		POL_SIGHASH_SHA2_256 | POL_SIGHASH_SHA2_384 | POL_SIGHASH_SHA2_512;
+	cfg->conn_default.options[KBF_NIC_OFFLOAD] = yna_auto;
+	cfg->conn_default.options[KBF_IKELIFETIME] = IKE_SA_LIFETIME_DEFAULT;
 
-	d->left.addr_family = AF_INET;
-	d->left.addr = address_any(&ipv4_info);
-	d->left.nexttype = KH_NOTSET;
-	d->left.nexthop = address_any(&ipv4_info);
+	cfg->conn_default.options[KBF_REPLAY_WINDOW] = IPSEC_SA_DEFAULT_REPLAY_WINDOW;
 
-	d->right.addr_family = AF_INET;
-	d->right.addr = address_any(&ipv4_info);
-	d->right.nexttype = KH_NOTSET;
-	d->right.nexthop = address_any(&ipv4_info);
+	cfg->conn_default.options[KBF_RETRANSMIT_TIMEOUT] = RETRANSMIT_TIMEOUT_DEFAULT;
+	cfg->conn_default.options[KBF_RETRANSMIT_INTERVAL_MS] = RETRANSMIT_INTERVAL_DEFAULT_MS;
+
+	cfg->conn_default.options[KBF_SALIFETIME] = IPSEC_SA_LIFETIME_DEFAULT;
+	cfg->conn_default.options[KBF_REKEYMARGIN] = SA_REPLACEMENT_MARGIN_DEFAULT;
+	cfg->conn_default.options[KBF_REKEYFUZZ] = SA_REPLACEMENT_FUZZ_DEFAULT;
+
+	cfg->conn_default.options[KBF_KEYINGTRIES] = SA_REPLACEMENT_RETRIES_DEFAULT;
+
+	cfg->conn_default.options[KBF_HOSTADDRFAMILY] = AF_UNSPEC;
+	cfg->conn_default.options[KBF_CLIENTADDRFAMILY] = AF_UNSPEC;
+
+	cfg->conn_default.left.addr_family = AF_INET;
+	anyaddr(AF_INET, &cfg->conn_default.left.addr);
+	cfg->conn_default.left.nexttype = KH_NOTSET;
+	anyaddr(AF_INET, &cfg->conn_default.left.nexthop);
+
+	cfg->conn_default.right.addr_family = AF_INET;
+	anyaddr(AF_INET, &cfg->conn_default.right.addr);
+	cfg->conn_default.right.nexttype = KH_NOTSET;
+	anyaddr(AF_INET, &cfg->conn_default.right.nexthop);
 
 	/* default is NOT to look in DNS */
-	d->left.key_from_DNS_on_demand = FALSE;
-	d->right.key_from_DNS_on_demand = FALSE;
+	cfg->conn_default.left.key_from_DNS_on_demand = FALSE;
+	cfg->conn_default.right.key_from_DNS_on_demand = FALSE;
 
-	d->state = STATE_LOADED;
+	cfg->conn_default.options[KBF_AUTO] = STARTUP_IGNORE;
+	cfg->conn_default.state = STATE_LOADED;
 
-	d->left.authby = AUTH_UNSET;
-	d->right.authby = AUTH_UNSET;
+	cfg->ctlsocket = clone_str(DEFAULT_CTL_SOCKET, "default control socket");
 
-	d->left.updown = clone_str(DEFAULT_UPDOWN, "conn default left updown");
-	d->right.updown = clone_str(DEFAULT_UPDOWN, "conn default right updown");
-
-	/* ==== end of conn %default ==== */
+	cfg->conn_default.left.authby = AUTH_UNSET;
+	cfg->conn_default.right.authby = AUTH_UNSET;
 }
 
 /*
@@ -245,6 +235,23 @@ void starter_error_append(starter_errors_t *perrl, const char *fmt, ...)
 				(!conn->options[val] ? (fl) : LEMPTY); \
 		} \
 	}
+
+#define FREE_LIST(v) { if ((v) != NULL) { free_list(v); (v) = NULL; } }
+
+/**
+ * Free the pointer list
+ *
+ * @param list list of pointers
+ * @return void
+ */
+static void free_list(char **list)
+{
+	char **s;
+
+	for (s = list ; *s != NULL; s++)
+		pfreeany(*s);
+	pfree(list);
+}
 
 /**
  * Create a NULL-terminated array of tokens from a string of whitespace-separated tokens.
@@ -314,13 +321,12 @@ static bool load_setup(struct starter_config *cfg,
 	bool err = FALSE;
 	const struct kw_list *kw;
 
-	for (kw = cfgp->config_setup; kw != NULL; kw = kw->next) {
+	for (kw = cfgp->config_setup; kw; kw = kw->next) {
 		/**
 		 * the parser already made sure that only config keywords were used,
 		 * but we double check!
 		 */
 		assert(kw->keyword.keydef->validity & kv_config);
-		unsigned f = kw->keyword.keydef->field;
 
 		switch (kw->keyword.keydef->type) {
 		case kt_string:
@@ -328,11 +334,14 @@ static bool load_setup(struct starter_config *cfg,
 		case kt_dirname:
 		case kt_loose_enum:
 			/* all treated as strings for now */
-			assert(f < elemsof(cfg->setup.strings));
-			pfreeany(cfg->setup.strings[f]);
-			cfg->setup.strings[f] =
+			assert(kw->keyword.keydef->field <
+			       sizeof(cfg->setup.strings));
+			pfreeany(cfg->setup.strings[kw->keyword.keydef->
+							field]);
+			cfg->setup.strings[kw->keyword.keydef->field] =
 				clone_str(kw->string, "kt_loose_enum kw->string");
-			cfg->setup.strings_set[f] = TRUE;
+			cfg->setup.strings_set[kw->keyword.keydef->field] =
+				TRUE;
 			break;
 
 		case kt_list:
@@ -344,9 +353,12 @@ static bool load_setup(struct starter_config *cfg,
 		case kt_time:
 		case kt_percent:
 			/* all treated as a number for now */
-			assert(f < elemsof(cfg->setup.options));
-			cfg->setup.options[f] = kw->number;
-			cfg->setup.options_set[f] = TRUE;
+			assert(kw->keyword.keydef->field <
+			       sizeof(cfg->setup.options));
+			cfg->setup.options[kw->keyword.keydef->field] =
+				kw->number;
+			cfg->setup.options_set[kw->keyword.keydef->field] =
+				TRUE;
 			break;
 
 		case kt_bitstring:
@@ -400,7 +412,7 @@ static bool validate_end(struct starter_conn *conn_st,
 			starter_errors_t *perrl)
 {
 	err_t er = NULL;
-	int hostfam = conn_st->options[KNCF_HOSTADDRFAMILY];
+	int hostfam = conn_st->options[KBF_HOSTADDRFAMILY];
 	bool err = FALSE;
 
 	/*
@@ -410,14 +422,12 @@ static bool validate_end(struct starter_conn *conn_st,
 	 * For now, %defaultroute and %any means IPv4 only
 	 */
 	if (hostfam == AF_UNSPEC) {
-		const char *ips = end->strings[KNCF_IP];
-
 		hostfam = AF_INET;
 
-		if (ips != NULL &&
-		    (strchr(ips, ':') != NULL ||
-		     streq(ips, "%defaultroute6") ||
-		     streq(ips, "%any6")))
+		if (end->strings[KNCF_IP] != NULL &&
+			(strchr(end->strings[KSCF_IP], ':') != NULL ||
+			streq(end->strings[KSCF_IP], "%defaultroute6") ||
+			streq(end->strings[KSCF_IP], "%any6")))
 		{
 			hostfam = AF_INET6;
 		}
@@ -434,7 +444,7 @@ static bool validate_end(struct starter_conn *conn_st,
 	/* validate the KSCF_IP/KNCF_IP */
 	switch (end->addrtype) {
 	case KH_ANY:
-		end->addr = address_any(aftoinfo(hostfam));
+		anyaddr(hostfam, &end->addr);
 		break;
 
 	case KH_IFACE:
@@ -514,7 +524,7 @@ static bool validate_end(struct starter_conn *conn_st,
 			 * retain the specific IP in this case.
 			 * So we subsequently overwrite the IP address of the subnet.
 			 */
-			er = ttosubnet(value, 0, AF_UNSPEC, '0', &end->vti_ip);
+			er = ttosubnet(value, 0, AF_UNSPEC, &end->vti_ip);
 			if (er != NULL) {
 				ERR_FOUND("bad addr %svti=%s [%s]",
 					  leftright, value, er);
@@ -542,7 +552,7 @@ static bool validate_end(struct starter_conn *conn_st,
 			end->virt = clone_str(value, "validate_end item");
 		} else {
 			end->has_client = TRUE;
-			er = ttosubnet(value, 0, AF_UNSPEC, '0', &end->subnet);
+			er = ttosubnet(value, 0, AF_UNSPEC, &end->subnet);
 		}
 		if (er != NULL)
 			ERR_FOUND("bad subnet %ssubnet=%s [%s]", leftright,
@@ -550,7 +560,8 @@ static bool validate_end(struct starter_conn *conn_st,
 	}
 
 	/* set nexthop address to something consistent, by default */
-	end->nexthop = address_any(address_type(&end->addr));
+	anyaddr(hostfam, &end->nexthop);
+	anyaddr(addrtypeof(&end->addr), &end->nexthop);
 
 	/* validate the KSCF_NEXTHOP */
 	if (end->strings_set[KSCF_NEXTHOP]) {
@@ -585,7 +596,7 @@ static bool validate_end(struct starter_conn *conn_st,
 			end->nexttype = KH_IPADDR;
 		}
 	} else {
-		end->nexthop = address_any(aftoinfo(hostfam));
+		anyaddr(hostfam, &end->nexthop);
 
 		if (end->addrtype == KH_DEFAULTROUTE) {
 			end->nexttype = KH_DEFAULTROUTE;
@@ -676,9 +687,9 @@ static bool validate_end(struct starter_conn *conn_st,
 			  leftright, leftright);
 	}
 	if (end->strings_set[KSCF_CERT]) {
-		end->certx = clone_str(end->strings[KSCF_CERT], "KSCF_CERT");
+		end->cert = clone_str(end->strings[KSCF_CERT], "KSCF_CERT");
 	}
-	if (end->strings_set[KSCF_CKAID]) {
+	if ( end->strings_set[KSCF_CKAID]) {
 		const char *ckaid = end->strings[KSCF_CKAID];
 		/* try parsing it */
 		const char *ugh = ttodata(ckaid, 0, 16, NULL, 0, NULL);
@@ -718,16 +729,10 @@ static bool validate_end(struct starter_conn *conn_st,
 			    "connection's %saddresspool set to: %s",
 			    leftright, end->strings[KSCF_ADDRESSPOOL] );
 
-		er = ttorange(addresspool, NULL, &end->pool_range);
+		er = ttorange(addresspool, 0, AF_INET, &end->pool_range, TRUE);
 		if (er != NULL)
 			ERR_FOUND("bad %saddresspool=%s [%s]", leftright,
 					addresspool, er);
-
-		if (address_type(&end->pool_range.start) == &ipv6_info &&
-				!end->pool_range.is_subnet) {
-			ERR_FOUND("bad IPv6 %saddresspool=%s not subnet", leftright,
-					addresspool);
-		}
 	}
 
 	if (end->options_set[KNCF_XAUTHSERVER] ||
@@ -756,8 +761,14 @@ static bool translate_conn(struct starter_conn *conn,
 {
 	/* note: not all errors are considered serious */
 	bool serious_err = FALSE;
+	const struct kw_list *kw;
 
-	for (const struct kw_list *kw = sl->kw; kw != NULL; kw = kw->next) {
+	for (kw = sl->kw; kw != NULL; kw = kw->next) {
+		ksf *the_strings = &conn->strings;
+		str_set *set_strings = &conn->strings_set;
+		knf *the_options = &conn->options;
+		int_set *set_options = &conn->options_set;
+
 		if ((kw->keyword.keydef->validity & kv_conn) == 0) {
 			/* this isn't valid in a conn! */
 			char tmp_err[512];
@@ -770,43 +781,19 @@ static bool translate_conn(struct starter_conn *conn,
 			continue;
 		}
 
-		ksf *the_strings;
-		str_set *set_strings;
-		unsigned str_floor, str_roof;
-
-		knf *the_options;
-		int_set *set_options;
-		unsigned opt_floor, opt_roof;
-
 		if (kw->keyword.keydef->validity & kv_leftright) {
 			struct starter_end *this = kw->keyword.keyleft ?
 				&conn->left : &conn->right;
 
 			the_strings = &this->strings;
-			set_strings = &this->strings_set;
-			str_floor = KSCF_last_loose + 1;
-			str_roof = KSCF_last_leftright + 1;
-
 			the_options = &this->options;
+			set_strings = &this->strings_set;
 			set_options = &this->options_set;
-			opt_floor = KSCF_last_loose + 1;
-			opt_roof = KNCF_last_leftright + 1;
-		} else {
-			the_strings = &conn->strings;
-			set_strings = &conn->strings_set;
-			str_floor = KSCF_last_leftright + 1;
-			str_roof = KSCF_ROOF;
-
-			the_options = &conn->options;
-			set_options = &conn->options_set;
-			opt_floor = KNCF_last_leftright + 1;
-			opt_roof = KNCF_ROOF;
 		}
 
 		unsigned int field = kw->keyword.keydef->field;
 
 		assert(kw->keyword.keydef != NULL);
-
 		switch (kw->keyword.keydef->type) {
 		case kt_string:
 		case kt_filename:
@@ -816,9 +803,8 @@ static bool translate_conn(struct starter_conn *conn,
 		case kt_range:
 		case kt_subnet:
 		case kt_idtype:
-			/* all treated as strings for now, even loose enums */
-			assert(field < str_roof);
-
+			/* all treated as strings for now */
+			assert(kw->keyword.keydef->field < KEY_STRINGS_ROOF);
 			if ((*set_strings)[field] == k_set) {
 				char tmp_err[512];
 
@@ -857,7 +843,7 @@ static bool translate_conn(struct starter_conn *conn,
 		case kt_appendstring:
 		case kt_appendlist:
 			/* implicitly, this field can have multiple values */
-			assert(str_floor <= field && field < str_roof);
+			assert(kw->keyword.keydef->field < KEY_STRINGS_ROOF);
 			if ((*the_strings)[field] == NULL) {
 				(*the_strings)[field] = clone_str(kw->string, "kt_appendlist kw->string");
 			} else {
@@ -877,7 +863,8 @@ static bool translate_conn(struct starter_conn *conn,
 
 		case kt_rsakey:
 		case kt_loose_enum:
-			assert(field <= KSCF_last_loose);
+			assert(field < KEY_STRINGS_ROOF);
+			assert(field < KEY_NUMERIC_ROOF);
 
 			if ((*set_options)[field] == k_set) {
 				char tmp_err[512];
@@ -925,7 +912,7 @@ static bool translate_conn(struct starter_conn *conn,
 		case kt_time:
 		case kt_percent:
 			/* all treated as a number for now */
-			assert(opt_floor <= field && field < opt_roof);
+			assert(field < KEY_NUMERIC_ROOF);
 
 			if ((*set_options)[field] == k_set) {
 				char tmp_err[512];
@@ -1017,14 +1004,8 @@ static bool load_conn(
 	 * Note: conn->alsos will be NULL until we finish
 	 * and the appropriate list will be in local variable alsos.
 	 */
-
-	/* free any residual alsos list */
-	if (conn->alsos != NULL) {
-		for (char **s = conn->alsos; *s != NULL; s++)
-			pfreeany(*s);
-		pfree(conn->alsos);
-		conn->alsos = NULL;
-	}
+	if (conn->alsos != NULL)
+		FREE_LIST(conn->alsos);
 
 	int alsosize;
 	char **alsos = tokens_from_string(conn->strings[KSCF_ALSO], &alsosize);
@@ -1105,7 +1086,7 @@ static bool load_conn(
 					 * Requires a re-allocation.
 					 * Copying is shallow: the lists
 					 * are copied and freed but
-					 * the underlying strings are unchanged.
+					 * the underlaying strings are unchanged.
 					 */
 					char **ra = alloc_bytes((alsosize +
 						newalsosize + 1) *
@@ -1131,8 +1112,8 @@ static bool load_conn(
 	 */
 	conn->alsos = alsos;
 
-	if (conn->options_set[KNCF_TYPE]) {
-		switch ((enum keyword_satype)conn->options[KNCF_TYPE]) {
+	if (conn->options_set[KBF_TYPE]) {
+		switch ((enum keyword_satype)conn->options[KBF_TYPE]) {
 		case KS_TUNNEL:
 			conn->policy &= ~POLICY_SHUNT_MASK;
 			conn->policy |= POLICY_TUNNEL | POLICY_SHUNT_TRAP;
@@ -1169,9 +1150,9 @@ static bool load_conn(
 		}
 	}
 
-	if (conn->options_set[KNCF_FAILURESHUNT]) {
+	if (conn->options_set[KBF_FAILURESHUNT]) {
 		conn->policy &= ~POLICY_FAIL_MASK;
-		switch (conn->options[KNCF_FAILURESHUNT]) {
+		switch (conn->options[KBF_FAILURESHUNT]) {
 		case KFS_FAIL_NONE:
 			conn->policy |= POLICY_FAIL_NONE;
 			break;
@@ -1187,8 +1168,8 @@ static bool load_conn(
 		}
 	}
 
-	if (conn->options_set[KNCF_NEGOTIATIONSHUNT]) {
-		switch (conn->options[KNCF_NEGOTIATIONSHUNT]) {
+	if (conn->options_set[KBF_NEGOTIATIONSHUNT]) {
+		switch (conn->options[KBF_NEGOTIATIONSHUNT]) {
 		case KNS_FAIL_PASS:
 			conn->policy |= POLICY_NEGO_PASS;
 			break;
@@ -1198,63 +1179,47 @@ static bool load_conn(
 		}
 	}
 
-	KW_POLICY_FLAG(KNCF_COMPRESS, POLICY_COMPRESS);
-	KW_POLICY_FLAG(KNCF_PFS, POLICY_PFS);
+	KW_POLICY_FLAG(KBF_COMPRESS, POLICY_COMPRESS);
+	KW_POLICY_FLAG(KBF_PFS, POLICY_PFS);
 
 	/* reset authby= flags */
 	if (conn->options_set[KSCF_AUTHBY]) {
 
 		conn->policy &= ~POLICY_ID_AUTH_MASK;
-		conn->sighash_policy = LEMPTY;
+		conn->sighash_policy = POL_SIGHASH_NONE;
 	}
 
-	KW_POLICY_NEGATIVE_FLAG(KNCF_IKEPAD, POLICY_NO_IKEPAD);
+	KW_POLICY_NEGATIVE_FLAG(KBF_IKEPAD, POLICY_NO_IKEPAD);
 
-	KW_POLICY_NEGATIVE_FLAG(KNCF_REKEY, POLICY_DONT_REKEY);
-	KW_POLICY_FLAG(KNCF_REAUTH, POLICY_REAUTH);
+	KW_POLICY_NEGATIVE_FLAG(KBF_REKEY, POLICY_DONT_REKEY);
+	KW_POLICY_FLAG(KBF_REAUTH, POLICY_REAUTH);
 
-	KW_POLICY_FLAG(KNCF_AGGRMODE, POLICY_AGGRESSIVE);
+	KW_POLICY_FLAG(KBF_AGGRMODE, POLICY_AGGRESSIVE);
 
-	KW_POLICY_FLAG(KNCF_MODECONFIGPULL, POLICY_MODECFG_PULL);
+	KW_POLICY_FLAG(KBF_MODECONFIGPULL, POLICY_MODECFG_PULL);
 
-	KW_POLICY_FLAG(KNCF_OVERLAPIP, POLICY_OVERLAPIP);
+	KW_POLICY_FLAG(KBF_OVERLAPIP, POLICY_OVERLAPIP);
 
-	KW_POLICY_FLAG(KNCF_IKEv2_ALLOW_NARROWING,
+	KW_POLICY_FLAG(KBF_IKEv2_ALLOW_NARROWING,
 		       POLICY_IKEV2_ALLOW_NARROWING);
 
-	KW_POLICY_FLAG(KNCF_MOBIKE, POLICY_MOBIKE);
+	KW_POLICY_FLAG(KBF_MOBIKE, POLICY_MOBIKE);
 
-	KW_POLICY_FLAG(KNCF_IKEv2_PAM_AUTHORIZE,
+	KW_POLICY_FLAG(KBF_IKEv2_PAM_AUTHORIZE,
 		       POLICY_IKEV2_PAM_AUTHORIZE);
 
-	KW_POLICY_FLAG(KNCF_DECAP_DSCP, POLICY_DECAP_DSCP);
-	KW_POLICY_FLAG(KNCF_NOPMTUDISC, POLICY_NOPMTUDISC);
-	KW_POLICY_FLAG(KNCF_MSDH_DOWNGRADE, POLICY_MSDH_DOWNGRADE);
-	KW_POLICY_FLAG(KNCF_DNS_MATCH_ID, POLICY_DNS_MATCH_ID);
-	KW_POLICY_FLAG(KNCF_SHA2_TRUNCBUG, POLICY_SHA2_TRUNCBUG);
-
-	if (conn->options_set[KNCF_SAN_ON_CERT]) {
-		if (!conn->options[KNCF_SAN_ON_CERT])
-			conn->policy |= POLICY_ALLOW_NO_SAN;
-	}
-
-	/* ??? sometimes (when? why?) the member is already set */
+	KW_POLICY_FLAG(KBF_DECAP_DSCP, POLICY_DECAP_DSCP);
+	KW_POLICY_FLAG(KBF_NOPMTUDISC, POLICY_NOPMTUDISC);
+	KW_POLICY_FLAG(KBF_MSDH_DOWNGRADE, POLICY_MSDH_DOWNGRADE);
+	KW_POLICY_FLAG(KBF_DNS_MATCH_ID, POLICY_DNS_MATCH_ID);
+	KW_POLICY_FLAG(KBF_SHA2_TRUNCBUG, POLICY_SHA2_TRUNCBUG);
 
 #	define str_to_conn(member, kscf) { \
-		if (conn->strings_set[kscf]) { \
-			pfreeany(conn->member); \
+		if (conn->strings_set[kscf]) \
 			conn->member = clone_str(conn->strings[kscf], #kscf); \
-		} \
 	}
 
-	str_to_conn(connalias, KSCF_CONNALIAS);
-
-	str_to_conn(ike_crypto, KSCF_IKE);
 	str_to_conn(esp, KSCF_ESP);
-
-	str_to_conn(modecfg_dns, KSCF_MODECFGDNS);
-	str_to_conn(modecfg_domains, KSCF_MODECFGDOMAINS);
-	str_to_conn(modecfg_banner, KSCF_MODECFGBANNER);
 
 #ifdef HAVE_LABELED_IPSEC
 	str_to_conn(policy_label, KSCF_POLICY_LABEL);
@@ -1263,28 +1228,35 @@ static bool load_conn(
 				conn->policy_label);
 #endif
 
+	str_to_conn(ike, KSCF_IKE);
+	str_to_conn(modecfg_dns, KSCF_MODECFGDNS);
+	str_to_conn(modecfg_domains, KSCF_MODECFGDOMAINS);
+	str_to_conn(modecfg_banner, KSCF_MODECFGBANNER);
+
 	str_to_conn(conn_mark_both, KSCF_CONN_MARK_BOTH);
 	str_to_conn(conn_mark_in, KSCF_CONN_MARK_IN);
 	str_to_conn(conn_mark_out, KSCF_CONN_MARK_OUT);
 	str_to_conn(vti_iface, KSCF_VTI_IFACE);
+
+	str_to_conn(connalias, KSCF_CONNALIAS);
 
 	str_to_conn(redirect_to, KSCF_REDIRECT_TO);
 	str_to_conn(accept_redirect_to, KSCF_ACCEPT_REDIRECT_TO);
 
 #	undef str_to_conn
 
-	if (conn->options_set[KNCF_PHASE2]) {
+	if (conn->options_set[KBF_PHASE2]) {
 		conn->policy &= ~(POLICY_AUTHENTICATE | POLICY_ENCRYPT);
-		conn->policy |= conn->options[KNCF_PHASE2];
+		conn->policy |= conn->options[KBF_PHASE2];
 	}
 
 	/*
 	 * This option has really been turned into a boolean, but
 	 * we need the keywords for backwards compatibility for now
 	 */
-	if (conn->options_set[KNCF_IKEv2]) {
+	if (conn->options_set[KBF_IKEv2]) {
 
-		switch (conn->options[KNCF_IKEv2]) {
+		switch (conn->options[KBF_IKEv2]) {
 		case fo_never:
 		case fo_permit:
 			conn->policy |= POLICY_IKEV1_ALLOW;
@@ -1301,9 +1273,9 @@ static bool load_conn(
 		}
 	}
 
-	if (conn->options_set[KNCF_SEND_REDIRECT]) {
+	if (conn->options_set[KBF_SEND_REDIRECT]) {
 		if (!LIN(POLICY_IKEV1_ALLOW, conn->policy)) {
-			switch (conn->options[KNCF_SEND_REDIRECT]) {
+			switch (conn->options[KBF_SEND_REDIRECT]) {
 			case yna_yes:
 				conn->policy |= POLICY_SEND_REDIRECT_ALWAYS;
 				if (conn->redirect_to == NULL) {
@@ -1322,9 +1294,9 @@ static bool load_conn(
 		}
 	}
 
-	if (conn->options_set[KNCF_ACCEPT_REDIRECT]) {
+	if (conn->options_set[KBF_ACCEPT_REDIRECT]) {
 		if (!LIN(POLICY_IKEV1_ALLOW, conn->policy)) {
-			switch (conn->options[KNCF_ACCEPT_REDIRECT]) {
+			switch (conn->options[KBF_ACCEPT_REDIRECT]) {
 			case yna_yes:
 				conn->policy |= POLICY_ACCEPT_REDIRECT_YES;
 				break;
@@ -1343,11 +1315,11 @@ static bool load_conn(
 		}
 	}
 
-	if (conn->options_set[KNCF_PPK]) {
+	if (conn->options_set[KBF_PPK]) {
 		lset_t ppk = LEMPTY;
 
 		if (!(conn->policy & POLICY_IKEV1_ALLOW)) {
-			switch (conn->options[KNCF_PPK]) {
+			switch (conn->options[KBF_PPK]) {
 			case fo_propose:
 				ppk = POLICY_PPK_ALLOW;
 				break;
@@ -1367,10 +1339,10 @@ static bool load_conn(
 		conn->policy = conn->policy | ppk;
 	}
 
-	if (conn->options_set[KNCF_ESN]) {
+	if (conn->options_set[KBF_ESN]) {
 		conn->policy &= ~(POLICY_ESN_NO | POLICY_ESN_YES);
 
-		switch (conn->options[KNCF_ESN]) {
+		switch (conn->options[KBF_ESN]) {
 		case ESN_YES:
 			conn->policy |= POLICY_ESN_YES;
 			break;
@@ -1386,10 +1358,10 @@ static bool load_conn(
 		}
 	}
 
-	if (conn->options_set[KNCF_IKE_FRAG]) {
+	if (conn->options_set[KBF_IKE_FRAG]) {
 		conn->policy &= ~(POLICY_IKE_FRAG_ALLOW | POLICY_IKE_FRAG_FORCE);
 
-		switch (conn->options[KNCF_IKE_FRAG]) {
+		switch (conn->options[KBF_IKE_FRAG]) {
 		case ynf_no:
 			break;
 
@@ -1405,10 +1377,10 @@ static bool load_conn(
 		}
 	}
 
-	if (conn->options_set[KNCF_SAREFTRACK]) {
+	if (conn->options_set[KBF_SAREFTRACK]) {
 		conn->policy &= ~(POLICY_SAREF_TRACK | POLICY_SAREF_TRACK_CONNTRACK);
 
-		switch (conn->options[KNCF_SAREFTRACK]) {
+		switch (conn->options[KBF_SAREFTRACK]) {
 		case SAT_YES:
 			/* this is the default */
 			conn->policy |= POLICY_SAREF_TRACK;
@@ -1429,18 +1401,9 @@ static bool load_conn(
 	 * there is also leftauthby/rightauthby version stored in 'end'
 	 *
 	 * authby=secret|rsasig|null|never|rsa-HASH
-	 *
-	 * using authby=rsasig results in legacy POLICY_RSASIG_v1_5 and RSA_PSS
-	 *
-	 * HASH needs to use full syntax - eg sha2_256 and not sha256, to avoid
-	 * confusion with sha3_256
 	 */
 	if (conn->strings_set[KSCF_AUTHBY]) {
 		char *val = strtok(conn->strings[KSCF_AUTHBY], ", ");
-
-		conn->sighash_policy = LEMPTY;
-		conn->policy &= ~POLICY_ID_AUTH_MASK;
-		conn->policy &= ~POLICY_RSASIG_v1_5;
 
 		while (val != NULL) {
 			/* Supported for IKEv1 and IKEv2 */
@@ -1448,27 +1411,17 @@ static bool load_conn(
 				conn->policy |= POLICY_PSK;
 			} else if (streq(val, "rsasig") || streq(val, "rsa")) {
 				conn->policy |= POLICY_RSASIG;
-				conn->policy |= POLICY_RSASIG_v1_5;
-				conn->sighash_policy |= POL_SIGHASH_SHA2_256;
-				conn->sighash_policy |= POL_SIGHASH_SHA2_384;
-				conn->sighash_policy |= POL_SIGHASH_SHA2_512;
+				conn->sighash_policy |= POL_SIGHASH_NONE;
 			} else if (streq(val, "never")) {
 				conn->policy |= POLICY_AUTH_NEVER;
 			/* everything else is only supported for IKEv2 */
 			} else if (conn->policy & POLICY_IKEV1_ALLOW) {
-				starter_error_append(perrl, "ikev1 connection must use authby= of rsasig, secret or never");
+				starter_error_append(perrl, "connection allowing ikev1 must use authby= of rsasig, secret or never");
 				return TRUE;
 			} else if (streq(val, "null")) {
 				conn->policy |= POLICY_AUTH_NULL;
-			} else if (streq(val, "rsa-sha1")) {
+			} else if (streq(val, "rsa-sha2") || streq(val, "rsa-sha2_256")) {
 				conn->policy |= POLICY_RSASIG;
-				conn->policy |= POLICY_RSASIG_v1_5;
-			} else if (streq(val, "rsa-sha2")) {
-				conn->policy |= POLICY_RSASIG;
-				conn->sighash_policy |= POL_SIGHASH_SHA2_256;
-				conn->sighash_policy |= POL_SIGHASH_SHA2_384;
-				conn->sighash_policy |= POL_SIGHASH_SHA2_512;
-			} else if (streq(val, "rsa-sha2_256")) {
 				conn->sighash_policy |= POL_SIGHASH_SHA2_256;
 			} else if (streq(val, "rsa-sha2_384")) {
 				conn->policy |= POLICY_RSASIG;
@@ -1476,12 +1429,7 @@ static bool load_conn(
 			} else if (streq(val, "rsa-sha2_512")) {
 				conn->policy |= POLICY_RSASIG;
 				conn->sighash_policy |= POL_SIGHASH_SHA2_512;
-			} else if (streq(val, "ecdsa") || streq(val, "ecdsa-sha2")) {
-				conn->policy |= POLICY_ECDSA;
-				conn->sighash_policy |= POL_SIGHASH_SHA2_256;
-				conn->sighash_policy |= POL_SIGHASH_SHA2_384;
-				conn->sighash_policy |= POL_SIGHASH_SHA2_512;
-			} else if (streq(val, "ecdsa-sha2_256")) {
+			} else if (streq(val, "ecdsa") || streq(val, "ecdsa-sha2_256")) {
 				conn->policy |= POLICY_ECDSA;
 				conn->sighash_policy |= POL_SIGHASH_SHA2_256;
 			} else if (streq(val, "ecdsa-sha2_384")) {
@@ -1490,9 +1438,6 @@ static bool load_conn(
 			} else if (streq(val, "ecdsa-sha2_512")) {
 				conn->policy |= POLICY_ECDSA;
 				conn->sighash_policy |= POL_SIGHASH_SHA2_512;
-			} else if (streq(val, "ecdsa-sha1")) {
-				starter_error_append(perrl, "authby=ecdsa cannot use sha1, only sha2");
-				return TRUE;
 			} else {
 				starter_error_append(perrl, "connection authby= value is unknown");
 				return TRUE;
@@ -1525,15 +1470,17 @@ static bool load_conn(
 	 * ensource this for left,leftnexthop,right,rightnexthop
 	 */
 
-	if (conn->options_set[KNCF_AUTO])
-		conn->desired_state = conn->options[KNCF_AUTO];
+	if (conn->options_set[KBF_AUTO])
+		conn->desired_state = conn->options[KBF_AUTO];
 
 	return err;
 }
 
-static void copy_conn_default(struct starter_conn *conn,
-			      const struct starter_conn *def)
+static void conn_default(struct starter_conn *conn,
+			 struct starter_conn *def)
 {
+	int i;
+
 	/* structure copy to start */
 	*conn = *def;
 
@@ -1541,68 +1488,53 @@ static void copy_conn_default(struct starter_conn *conn,
 	conn->link.tqe_next = NULL;
 	conn->link.tqe_prev = NULL;
 
-	/* Unshare all strings */
+	conn->left.iface = clone_str(def->left.iface, "conn default left iface");
+	conn->left.id = clone_str(def->left.id, "conn default leftid");
+	conn->left.rsakey1 = clone_str(def->left.rsakey1, "conn default left rsakey1");
+	conn->left.rsakey2 = clone_str(def->left.rsakey2, "conn default left rsakey2");
+	conn->right.iface = clone_str(def->right.iface, "conn default right iface");
+	conn->right.id = clone_str(def->right.id, "conn default rightid");
+	conn->right.rsakey1 = clone_str(def->right.rsakey1, "conn default right rsakey1");
+	conn->right.rsakey2 = clone_str(def->right.rsakey2, "conn default right rsakey2");
+#define C(LR,F) conn->LR.F = clone_str(DEFAULT_UPDOWN, "conn default " #LR " " #F)
+#define CLR(F) C(left,F); C(right,F)
+	CLR(updown);
+#undef CLR
+#undef C
 
-	/*
-	 * Note: string fields in struct starter_end and struct starter_conn
-	 * should correspond to STR_FIELD calls in copy_conn_default() and confread_free_conn.
-	 */
+	for (i = 0; i < KSCF_ROOF; i++) {
+		conn->left.strings[i] = clone_str(def->left.strings[i], "conn default left item");
+		conn->right.strings[i] = clone_str(def->right.strings[i], "conn default right item");
+	}
+	for (i = 0; i < KNCF_ROOF; i++) {
+		conn->left.options[i] = def->left.options[i];
+		conn->right.options[i] = def->right.options[i];
+	}
+	for (i = 0; i < KSF_ROOF; i++)
+		conn->strings[i] = clone_str(def->strings[i], "conn default string item");
+	for (i = 0; i < KBF_ROOF; i++)
+		conn->options[i] = def->options[i];
 
-	assert(conn->connalias == NULL);
+	conn->esp = clone_str(def->esp, "conn default esp");
+	conn->ike = clone_str(def->ike, "conn default ike");
 
-# define STR_FIELD(f)  { conn->f = clone_str(conn->f, #f); }
-
-	STR_FIELD(name);
-	STR_FIELD(connalias);
-
-	STR_FIELD(ike_crypto);
-	STR_FIELD(esp);
-
-	STR_FIELD(modecfg_dns);
-	STR_FIELD(modecfg_domains);
-	STR_FIELD(modecfg_banner);
-	STR_FIELD(conn_mark_both);
-	STR_FIELD(conn_mark_in);
-	STR_FIELD(conn_mark_out);
-	STR_FIELD(policy_label);
-	STR_FIELD(conn_mark_both);
-	STR_FIELD(conn_mark_in);
-	STR_FIELD(conn_mark_out);
-	STR_FIELD(vti_iface);
-	STR_FIELD(redirect_to);
-	STR_FIELD(accept_redirect_to);
-
-	for (unsigned i = 0; i < elemsof(conn->strings); i++)
-		STR_FIELD(strings[i]);
-
-	/* handle starter_end strings */
-
-# define STR_FIELD_END(f) { STR_FIELD(left.f); STR_FIELD(right.f); }
-
-	STR_FIELD_END(iface);
-	STR_FIELD_END(id);
-	STR_FIELD_END(rsakey1);
-	STR_FIELD_END(rsakey2);
-	STR_FIELD_END(virt);
-	STR_FIELD_END(certx);
-	STR_FIELD_END(ckaid);
-	STR_FIELD_END(ca);
-	STR_FIELD_END(updown);
-
-	for (unsigned i = 0; i < elemsof(conn->left.strings); i++)
-		STR_FIELD_END(strings[i]);
-
-# undef STR_FIELD_END
-
-# undef STR_FIELD
+	conn->modecfg_dns = clone_str(def->modecfg_dns, "conn default dns");
+	conn->modecfg_domains = clone_str(def->modecfg_domains, "conn default domains");
+	conn->modecfg_banner = clone_str(def->modecfg_banner, "conn default banner");
+	conn->conn_mark_both = clone_str(def->conn_mark_both, "conn default conn_mark_both");
+	conn->conn_mark_in = clone_str(def->conn_mark_in, "conn default conn_mark_in");
+	conn->conn_mark_out = clone_str(def->conn_mark_out, "conn default conn_mark_out");
+#ifdef HAVE_LABELED_IPSEC
+	conn->policy_label = clone_str(def->policy_label, "conn default policy_label");
+#endif
+	conn->policy = def->policy;
 }
 
-static struct starter_conn *alloc_add_conn(struct starter_config *cfg, const char *name)
+struct starter_conn *alloc_add_conn(struct starter_config *cfg, const char *name)
 {
 	struct starter_conn *conn = alloc_thing(struct starter_conn, "add_conn starter_conn");
 
-	copy_conn_default(conn, &cfg->conn_default);
-	assert(conn->name == NULL);
+	conn_default(conn, &cfg->conn_default);
 	conn->name = clone_str(name, "add conn name");
 	conn->desired_state = STARTUP_IGNORE;
 	conn->state = STATE_FAILED;
@@ -1718,70 +1650,50 @@ struct starter_config *confread_load(const char *file,
 
 static void confread_free_conn(struct starter_conn *conn)
 {
-	/* Free all strings */
+	int i;
 
-	/*
-	 * Note: string fields in struct starter_end and struct starter_conn
-	 * should correspond to STR_FIELD calls in copy_conn_default() and confread_free_conn.
-	 */
+	pfreeany(conn->left.iface);
+	pfreeany(conn->left.id);
+	pfreeany(conn->left.rsakey1);
+	pfreeany(conn->left.rsakey2);
+	pfreeany(conn->right.iface);
+	pfreeany(conn->right.id);
+	pfreeany(conn->right.rsakey1);
+	pfreeany(conn->right.rsakey2);
+	for (i = 0; i < KSCF_ROOF; i++) {
+		pfreeany(conn->left.strings[i]);
+		pfreeany(conn->right.strings[i]);
+	}
+	for (i = 0; i < KSF_ROOF; i++)
+		pfreeany(conn->strings[i]);
 
-# define STR_FIELD(f)  { pfreeany(conn->f); }
+	pfreeany(conn->connalias);
+	pfreeany(conn->name);
 
-	STR_FIELD(name);
-	STR_FIELD(connalias);
+	pfreeany(conn->esp);
+	pfreeany(conn->ike);
 
-	STR_FIELD(ike_crypto);
-	STR_FIELD(esp);
+	pfreeany(conn->left.virt);
+	pfreeany(conn->right.virt);
 
-	STR_FIELD(modecfg_dns);
-	STR_FIELD(modecfg_domains);
-	STR_FIELD(modecfg_banner);
-	STR_FIELD(conn_mark_both);
-	STR_FIELD(conn_mark_in);
-	STR_FIELD(conn_mark_out);
-	STR_FIELD(policy_label);
-	STR_FIELD(conn_mark_both);
-	STR_FIELD(conn_mark_in);
-	STR_FIELD(conn_mark_out);
-	STR_FIELD(vti_iface);
-	STR_FIELD(redirect_to);
-	STR_FIELD(accept_redirect_to);
-
-	for (unsigned i = 0; i < elemsof(conn->strings); i++)
-		STR_FIELD(strings[i]);
-
-	/* handle starter_end strings */
-
-# define STR_FIELD_END(f) { STR_FIELD(left.f); STR_FIELD(right.f); }
-
-	STR_FIELD_END(iface);
-	STR_FIELD_END(id);
-	STR_FIELD_END(rsakey1);
-	STR_FIELD_END(rsakey2);
-	STR_FIELD_END(virt);
-	STR_FIELD_END(certx);
-	STR_FIELD_END(ckaid);
-	STR_FIELD_END(ca);
-	STR_FIELD_END(updown);
-
-	for (unsigned i = 0; i < elemsof(conn->left.strings); i++)
-		STR_FIELD_END(strings[i]);
-
-# undef STR_FIELD_END
-
-# undef STR_FIELD
+	pfreeany(conn->left.updown);
+	pfreeany(conn->right.updown);
 }
 
 void confread_free(struct starter_config *cfg)
 {
 	pfree(cfg->ctlsocket);
 
-	for (unsigned i = 0; i < elemsof(cfg->setup.strings); i++)
+	int i;
+
+	for (i = 0; i < KSF_ROOF; i++)
 		pfreeany(cfg->setup.strings[i]);
 
 	confread_free_conn(&cfg->conn_default);
 
-	for (struct starter_conn *conn = cfg->conns.tqh_first; conn != NULL; ) {
+	struct starter_conn *conn;
+
+	for (conn = cfg->conns.tqh_first; conn != NULL; ) {
 		struct starter_conn *c = conn;
 
 		conn = conn->link.tqe_next;

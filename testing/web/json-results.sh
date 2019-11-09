@@ -82,7 +82,6 @@ for resultsdir in "$@" ; do
     (
 	set -x
 	${utilsdir}/kvmresults.py \
-		   --exit-ok \
 		   --test-kind '' \
 		   --test-status '' \
 		   --skip '' \

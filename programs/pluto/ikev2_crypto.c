@@ -5,9 +5,8 @@
  * Copyright (C) 2012 Avesh Agarwal <avagarwa@redhat.com>
  * Copyright (C) 2013-2014 Paul Wouters <paul@libreswan.org>
  * Copyright (C) 2013 D. Hugh Redelmeier <hugh@mimosa.com>
- * Copyright (C) 2017-2019 Andrew Cagney <cagney@gnu.org>
+ * Copyright (C) 2017 Andrew Cagney
  * Copyright (C) 2017 Antony Antony <antony@phenome.org>
- * Copyright (C) 2019 Paul Wouters <pwouters@redhat.com>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -27,6 +26,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#include <libreswan.h>
 
 #include "sysdep.h"
 #include "constants.h"
@@ -45,6 +45,7 @@
 #include "ikev2.h"
 #include "ikev2_prf.h"
 #include "ike_alg.h"
+#include "alg_info.h"
 #include "kernel_alg.h"
 #include "crypt_symkey.h"
 #include "ikev2_prf.h"
@@ -114,7 +115,7 @@ void ikev2_derive_child_keys(struct child_sa *child)
 	if (st->st_pfs_group != NULL) {
 		DBG(DBG_CRYPT, DBG_log("#%lu %s add g^ir to child key %p",
 					st->st_serialno,
-					st->st_state->name,
+					st->st_state_name,
 					st->st_shared_nss));
 		shared = st->st_shared_nss;
 	}
@@ -136,6 +137,13 @@ void ikev2_derive_child_keys(struct child_sa *child)
 
 	release_symkey(__func__, "keymat", &keymat);
 
+	if (child->sa.st_sa_role == 0) {
+		PEXPECT_LOG("unset child sa in state #%lu",
+			    child->sa.st_serialno);
+		child->sa.st_sa_role = (ike_sa(&child->sa)->sa.st_original_role == ORIGINAL_INITIATOR)
+			? SA_INITIATOR : SA_RESPONDER;
+	}
+
 	/*
 	 * The initiator stores outgoing initiator-to-responder keymat
 	 * in PEER, and incomming responder-to-initiator keymat in
@@ -144,16 +152,16 @@ void ikev2_derive_child_keys(struct child_sa *child)
 	switch (child->sa.st_sa_role) {
 	case SA_RESPONDER:
 		DBG(DBG_PRIVATE, {
-			    DBG_dump_hunk("our  keymat", ikeymat);
-			    DBG_dump_hunk("peer keymat", rkeymat);
+			    DBG_dump_chunk("our  keymat", ikeymat);
+			    DBG_dump_chunk("peer keymat", rkeymat);
 		    });
 		ipi->our_keymat = ikeymat.ptr;
 		ipi->peer_keymat = rkeymat.ptr;
 		break;
 	case SA_INITIATOR:
 		DBG(DBG_PRIVATE, {
-			    DBG_dump_hunk("our  keymat", rkeymat);
-			    DBG_dump_hunk("peer keymat", ikeymat);
+			    DBG_dump_chunk("our  keymat", rkeymat);
+			    DBG_dump_chunk("peer keymat", ikeymat);
 		    });
 		ipi->peer_keymat = ikeymat.ptr;
 		ipi->our_keymat = rkeymat.ptr;
@@ -161,4 +169,5 @@ void ikev2_derive_child_keys(struct child_sa *child)
 	default:
 		bad_case(child->sa.st_sa_role);
 	}
+
 }

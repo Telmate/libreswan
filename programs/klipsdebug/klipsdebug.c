@@ -128,7 +128,7 @@ int main(int argc, char **argv)
 				longopts, 0)) != EOF) {
 		switch (c) {
 		case 'd':
-			cur_debugging = DBG_BASE;
+			pfkey_lib_debug = PF_KEY_DEBUG_PARSE_MAX;
 			argcount--;
 			break;
 		case 's':

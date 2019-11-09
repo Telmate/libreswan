@@ -21,7 +21,6 @@
 
 struct ike_alg;
 struct proposal_parser;
-struct ike_alg_type;
 
 /*
  * Filter function to accept/reject an algorithm.
@@ -31,19 +30,27 @@ struct ike_alg_type;
  * messages better align with the input files.
  */
 
-bool alg_byname_ok(struct proposal_parser *parser,
+bool alg_byname_ok(const struct proposal_parser *parser,
 		   const struct ike_alg *alg, shunk_t print_name);
 
 /*
  * Helper functions to implement most of the lookup.
  */
 
-const struct ike_alg *encrypt_alg_byname(struct proposal_parser *parser,
+const struct ike_alg *encrypt_alg_byname(const struct proposal_parser *parser,
 					 shunk_t name, size_t key_bit_length,
 					 shunk_t print_name);
 
-const struct ike_alg *alg_byname(struct proposal_parser *parser,
-				 const struct ike_alg_type *type,
-				 shunk_t name, shunk_t print_name);
+const struct ike_alg *prf_alg_byname(const struct proposal_parser *parser,
+				     shunk_t name, size_t key_bit_length,
+				     shunk_t print_name);
+
+const struct ike_alg *integ_alg_byname(const struct proposal_parser *parser,
+				       shunk_t name, size_t key_bit_length,
+				       shunk_t print_name);
+
+const struct ike_alg *dh_alg_byname(const struct proposal_parser *parser,
+				    shunk_t name, size_t key_bit_length,
+				    shunk_t print_name);
 
 #endif

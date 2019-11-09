@@ -1,3 +1,0 @@
-
-Confirm we do not allow IKEv2 to use SHA1 in the default proposal list
-

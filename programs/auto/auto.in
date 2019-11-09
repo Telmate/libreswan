@@ -42,7 +42,7 @@ utc=
 verbose=
 remote=
 
-while [ $# != 0 ]
+for dummy
 do
     case "$1" in
 	--help)
@@ -234,11 +234,6 @@ case "${op}" in
 	;;
     --status)
 	${showonly} ipsec whack --ctlsocket "${CTLSOCKET}" --status
-	exit
-	;;
-    --replace)
-	${showonly} ipsec whack --ctlsocket "${CTLSOCKET}" --name ${names} --delete
-	${showonly} ipsec addconn --ctlsocket "${CTLSOCKET}" ${verbose} ${config} ${names}
 	exit
 	;;
 esac

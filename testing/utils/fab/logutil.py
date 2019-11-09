@@ -158,13 +158,6 @@ class DebugHandler(logging.Handler):
         self.setLevel(NONE)
         self.setFormatter(_DEBUG_FORMATTER)
 
-    def createLock(self):
-        pass
-    def acquire(self):
-        pass
-    def release(self):
-        pass
-
     def emit(self, record):
         for stream_handler in self.stream_handlers:
             stream_handler.emit(record)

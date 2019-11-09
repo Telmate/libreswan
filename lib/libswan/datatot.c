@@ -12,10 +12,6 @@
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Library General Public
  * License for more details.
  */
-
-#include <stddef.h>
-
-#include "libreswan/passert.h"
 #include "libreswan.h"
 
 static void convert(const char *src, size_t nreal, int format, char *out);
@@ -87,9 +83,9 @@ size_t dstlen;
 		break;
 	}
 
-	passert(inblocksize < sizeof(inblock));
-	passert(outblocksize < sizeof(outblock));
-	passert(breakevery % outblocksize == 0);
+	user_assert(inblocksize < sizeof(inblock));
+	user_assert(outblocksize < sizeof(outblock));
+	user_assert(breakevery % outblocksize == 0);
 
 	if (srclen == 0)
 		return 0;
@@ -114,7 +110,7 @@ size_t dstlen;
 		dst += nreal;
 	}
 
-	passert(dst <= stop);
+	user_assert(dst <= stop);
 	sincebreak = 0;
 
 	while (ntodo > 0) {
@@ -134,7 +130,7 @@ size_t dstlen;
 		sincebreak += outblocksize;
 		if (dst < stop) {
 			if (out != dst) {
-				passert(
+				user_assert(
 					(ptrdiff_t)outblocksize > stop - dst);
 				memcpy(dst, out, stop - dst);
 				dst = stop;
@@ -153,7 +149,7 @@ size_t dstlen;
 		}
 	}
 
-	passert(dst <= stop);
+	user_assert(dst <= stop);
 	*dst++ = '\0';
 	needed++;
 
@@ -176,10 +172,10 @@ char *out;
 	unsigned char c;
 	unsigned char c1, c2, c3;
 
-	passert(nreal > 0);
+	user_assert(nreal > 0);
 	switch (format) {
 	case 'x':
-		passert(nreal == 1);
+		user_assert(nreal == 1);
 		c = (unsigned char)*src;
 		*out++ = hex[c >> 4];
 		*out++ = hex[c & 0xf];
@@ -205,7 +201,7 @@ char *out;
 			*out++ = base64[c3 & 0x3f];     /* bottom 6 of c3 */
 		break;
 	default:
-		passert(nreal == 0);        /* unknown format */
+		user_assert(nreal == 0);        /* unknown format */
 		break;
 	}
 }

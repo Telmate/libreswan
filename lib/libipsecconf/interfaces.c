@@ -27,70 +27,50 @@
 
 #include "sysdep.h"
 #include "constants.h"
-#include "ip_endpoint.h"
-#include "ip_address.h"
 #include "socketwrapper.h"
 #include "libreswan/ipsec_tunnel.h"
-#include "libreswan/passert.h"
+
 #include "ipsecconf/interfaces.h"
 #include "ipsecconf/exec.h"
 #include "ipsecconf/starterlog.h"
-#include "lswlog.h"	/* for pexpect() */
 
 bool starter_iface_find(const char *iface, int af, ip_address *dst, ip_address *nh)
 {
-	/* XXX: danger REQ is recycled by ioctl() callss */
 	struct ifreq req;
+	struct sockaddr_in *sa = (struct sockaddr_in *)(&req.ifr_addr);
+	int sock;
 
 	if (iface == NULL)
-		return false;	/* ??? can this ever happen? */
+		return FALSE;	/* ??? can this ever happen? */
 
-	int sock = safe_socket(af, SOCK_DGRAM, 0);
+	sock = safe_socket(af, SOCK_DGRAM, 0);
 	if (sock < 0)
-		return false;
+		return FALSE;
 
 	fill_and_terminate(req.ifr_name, iface, IFNAMSIZ);
 
-	/* UP? */
 	if (ioctl(sock, SIOCGIFFLAGS, &req) != 0 ||
 	    (req.ifr_flags & IFF_UP) == 0x0) {
 		close(sock);
-		return false;
+		return FALSE;
 	}
 
-	/*
-	 * convert the sockaddr to an endpoint (ADDRESS:PORT, but
-	 * expect PORT==0)) and then extract just the address
-	 */
-
-	/* get NH */
 	if ((req.ifr_flags & IFF_POINTOPOINT) != 0x0 && nh != NULL &&
 	    (ioctl(sock, SIOCGIFDSTADDR, &req) == 0)) {
-		const ip_sockaddr *sa = (const ip_sockaddr *)&req.ifr_addr;
-		passert(&sa->sa == &req.ifr_addr);
-		if (sa->sa.sa_family == af) {
-			/* XXX: sizeof right? */
-			ip_endpoint nhe;
-			happy(sockaddr_to_endpoint(sa, sizeof(*sa), &nhe));
-			pexpect(endpoint_hport(&nhe) == 0);
-			*nh = endpoint_address(&nhe);
+		/* ??? what should happen for IPv6? */
+		if (sa->sin_family == af) {
+			initaddr((const void *)&sa->sin_addr,
+				 sizeof(struct in_addr), af, nh);
 		}
 	}
-
-	/* get DST */
 	if (dst != NULL && ioctl(sock, SIOCGIFADDR, &req) == 0) {
-		const ip_sockaddr *sa = (const ip_sockaddr *)&req.ifr_addr;
-		passert(&sa->sa == &req.ifr_addr);
-		if (sa->sa.sa_family == af) {
-			/* XXX: sizeof right? */
-			ip_endpoint dste;
-			happy(sockaddr_to_endpoint(sa, sizeof(*sa), &dste));
-			pexpect(endpoint_hport(&dste) == 0);
-			*dst = endpoint_address(&dste);
+		/* ??? what should happen for IPv6? */
+		if (sa->sin_family == af) {
+			initaddr((const void *)&sa->sin_addr,
+				 sizeof(struct in_addr), af, dst);
 		}
 	}
-
 	close(sock);
-	return true;
+	return TRUE;
 }
 

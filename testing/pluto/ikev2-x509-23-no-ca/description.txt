@@ -1,3 +1,0 @@
-IKEv2 test X.509 where east has its CA removed.
-
-the connection should fail

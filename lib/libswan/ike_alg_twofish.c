@@ -24,7 +24,6 @@
 #include "lswlog.h"
 #include "ike_alg.h"
 #include "ike_alg_encrypt.h"
-#include "ike_alg_encrypt_ops.h"
 #include "ietf_constants.h"
 #include "sadb.h"
 
@@ -75,7 +74,6 @@ static void twofish_check(const struct encrypt_desc *alg UNUSED)
 }
 
 static const struct encrypt_ops twofish_encrypt_ops = {
-	.backend = "twofish",
 	.check = twofish_check,
 	.do_crypt = do_twofish,
 };
@@ -85,7 +83,7 @@ const struct encrypt_desc ike_alg_encrypt_twofish_cbc =
 	.common = {
 		.name = "twofish",
 		.fqn = "TWOFISH_CBC",
-		.names = "twofish,twofish_cbc",
+		.names = { "twofish", "twofish_cbc", },
 		.algo_type = IKE_ALG_ENCRYPT,
 		.id = {
 			[IKEv1_OAKLEY_ID] = OAKLEY_TWOFISH_CBC,
@@ -113,7 +111,7 @@ const struct encrypt_desc ike_alg_encrypt_twofish_ssh =
 	.common = {
 		.name = "twofish_ssh", /* We don't know if this is right */
 		.fqn = "TWOFISH_SSH", /* We don't know if this is right */
-		.names = "twofish_ssh,twofish_cbc_ssh",
+		.names = { "twofish_ssh", "twofish_cbc_ssh", },
 		.algo_type = IKE_ALG_ENCRYPT,
 		.id = {
 			[IKEv1_OAKLEY_ID] = OAKLEY_TWOFISH_CBC_SSH,

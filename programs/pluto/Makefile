@@ -55,8 +55,6 @@ OBJS += ikev2_send.o
 OBJS += ikev2_message.o
 OBJS += ikev2_cookie.o
 OBJS += ikev2_ts.o
-OBJS += ikev2_msgid.o
-OBJS += ikev2_sighash.o
 
 OBJS += state_db.o
 OBJS += show.o
@@ -74,7 +72,7 @@ endif
 # where to find libreswan headers
 HDRDIRS +=-I${LIBRESWANSRCDIR}/include -I$(LIBRESWANSRCDIR)/lib/libcrypto
 
-ifeq ($(USE_KLIPS),true)
+ifeq ($(USE_PFKEYv2),true)
 OBJS += kernel_pfkey.o
 endif
 
@@ -132,6 +130,13 @@ ifeq ($(USE_UNBOUND_EVENT_H_COPY),true)
 CFLAGS+=-I${LIBRESWANSRCDIR}/include/unbound
 endif
 
+OBJS += ike_alg_dh_nss_ecp_ops.o
+OBJS += ike_alg_dh_nss_modp_ops.o
+OBJS += ike_alg_hash_nss_ops.o
+OBJS += ike_alg_prf_hmac_ops.o
+OBJS += ike_alg_prf_nss_ops.o
+OBJS += ike_alg_prf_nss_xcbc_ops.o
+
 OBJS += db_ops.o
 
 # libefence is a free memory allocation debugger
@@ -147,9 +152,6 @@ LDFLAGS += -lpthread
 LDFLAGS += $(FIPSCHECK_LDFLAGS)
 LDFLAGS += $(LIBCAP_NG_LDFLAGS)
 
-# Add RT_LDFLAGS for glibc < 2.17
-LDFLAGS += $(RT_LDFLAGS)
-
 ifeq ($(USE_BSDKAME),true)
 OBJS += kernel_bsd.o
 else
@@ -160,10 +162,11 @@ ifneq ($(LD_LIBRARY_PATH),)
 LDFLAGS+=-L$(LD_LIBRARY_PATH)
 endif
 
+LDFLAGS += -lrt
 LDFLAGS += $(UNBOUND_LDFLAGS)
 LDFLAGS += $(LINUX_AUDIT_LDFLAGS)
 
-OBJS += linux_audit.o
+OBJS += $(call if-enabled, USE_LINUX_AUDIT, linux_audit.o)
 
 LDFLAGS += -levent
 LDFLAGS += -levent_pthreads
@@ -201,15 +204,13 @@ OBJS += ike_spi.o
 OBJS += foodgroups.o log.o state.o plutomain.o plutoalg.o server.o
 OBJS += peerlog.o
 OBJS += hash_table.o list_entry.o
-OBJS += timer.o hostpair.o
+OBJS += timer.o hmac.o hostpair.o
 OBJS += retry.o
-OBJS += ipsec_doi.o
+OBJS += myid.o ipsec_doi.o
 ifeq ($(USE_DNSSEC),true)
 OBJS += ikev2_ipseckey.o
 endif
 OBJS += ikev1.o ikev1_main.o ikev1_quick.o ikev1_dpd.o ikev1_spdb_struct.o ikev1_msgid.o
-OBJS += ikev1_hash.o
-OBJS += ikev1_message.o
 OBJS += ikev2.o ikev2_parent.o ikev2_child.o ikev2_spdb_struct.o
 OBJS += ikev2_ecdsa.o ikev2_rsa.o ikev2_psk.o ikev2_ppk.o ikev2_crypto.o
 OBJS += ikev2_redirect.o
@@ -223,12 +224,10 @@ OBJS += crypt_dh_v1.o
 OBJS += crypt_dh_v2.o
 OBJS += rnd.o spdb.o spdb_struct.o
 OBJS += vendor.o nat_traversal.o virtual.o
-OBJS += packet.o pluto_constants.o
+OBJS += packet.o pluto_constants.o readwhackmsg.o
 OBJS += nss_cert_load.o pem.o nss_cert_verify.o
 OBJS += nss_ocsp.o nss_crl_import.o
 OBJS += nss_err.o
-OBJS += root_certs.o
-OBJS += pluto_timing.o
 
 # Archives
 OBJS += $(LIBRESWANLIB)

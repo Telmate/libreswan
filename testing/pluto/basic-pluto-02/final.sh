@@ -1,5 +1,4 @@
 ../../pluto/bin/ipsec-look.sh
-../../pluto/bin/xfrmcheck.sh
 : ==== cut ====
 ipsec auto --status
 : ==== tuc ====

@@ -69,10 +69,14 @@ extern int debug_pfkey;
  */
 #include <libreswan/pfkey_debug.h>
 
+unsigned int pfkey_lib_debug = PF_KEY_DEBUG_PARSE_NONE;
+libreswan_keying_debug_func_t pfkey_debug_func = NULL;
+libreswan_keying_debug_func_t pfkey_error_func = NULL;
+
 #define SENDERR(_x) do { error = -(_x); goto errlab; } while (0)
 
 static struct satype_tbl {
-	const struct ip_protocol *proto;
+	uint8_t proto;
 	uint8_t satype;
 	char *name;
 } satype_tbl[] = {
@@ -94,7 +98,7 @@ static struct satype_tbl {
 	{ 0,            0,                      "UNKNOWN" }
 };
 
-const struct ip_protocol *satype2proto(uint8_t satype)
+uint8_t satype2proto(uint8_t satype)
 {
 	int i = 0;
 
@@ -103,7 +107,7 @@ const struct ip_protocol *satype2proto(uint8_t satype)
 	return satype_tbl[i].proto;
 }
 
-uint8_t proto2satype(const struct ip_protocol *proto)
+uint8_t proto2satype(uint8_t proto)
 {
 	int i = 0;
 
@@ -1291,10 +1295,10 @@ int pfkey_msg_parse(struct sadb_msg *pfkey_msg,
 		} else {
 			DEBUGGING(PF_KEY_DEBUG_PARSE_PROBLEM,
 				  "pfkey_msg_parse: "
-				  "satype %d(%s) conversion to proto gives %s for msg_type %d(%s).\n",
+				  "satype %d(%s) conversion to proto gives %d for msg_type %d(%s).\n",
 				  pfkey_msg->sadb_msg_satype,
 				  satype2name(pfkey_msg->sadb_msg_satype),
-				  satype2proto(pfkey_msg->sadb_msg_satype)->name,
+				  satype2proto(pfkey_msg->sadb_msg_satype),
 				  pfkey_msg->sadb_msg_type,
 				  pfkey_v2_sadb_type_string(pfkey_msg->
 							    sadb_msg_type));
