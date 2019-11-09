@@ -10,7 +10,7 @@ road #
  echo "192.1.2.0/24"  >> /etc/ipsec.d/policies/private-or-clear
 road #
  ipsec start
-Redirecting to: [initsystem]
+Redirecting to: systemctl start ipsec.service
 road #
  /testing/pluto/bin/wait-until-pluto-started
 road #
@@ -32,9 +32,9 @@ initdone
 road #
  ipsec whack --oppohere 192.1.3.209 --oppothere 192.1.2.23
 002 initiate on demand from 192.1.3.209:0 to 192.1.2.23:0 proto=0 because: whack
-1v2 "private-or-clear#192.1.2.0/24"[1] ...192.1.2.23 #1: initiate
+133 "private-or-clear#192.1.2.0/24"[1] ...192.1.2.23 #1: initiate
 002 "private-or-clear#192.1.2.0/24"[1] ...192.1.2.23 #2: certificate verified OK: E=user-east@testing.libreswan.org,CN=east.testing.libreswan.org,OU=Test Department,O=Libreswan,L=Toronto,ST=Ontario,C=CA
-003 "private-or-clear#192.1.2.0/24"[1] ...192.1.2.23 #2: Authenticated using RSA with IKEv2_AUTH_HASH_SHA2_512
+003 "private-or-clear#192.1.2.0/24"[1] ...192.1.2.23 #2: Authenticated using RSA
 002 "private-or-clear#192.1.2.0/24"[1] ...192.1.2.23 #2: negotiated connection [192.1.3.209-192.1.3.209:0-65535 0] -> [192.1.2.23-192.1.2.23:0-65535 0]
 road #
  # should show established tunnel and no bare shunts
@@ -70,12 +70,8 @@ src 192.1.3.209 dst 192.1.2.23
 XFRM policy:
 src 192.0.2.0/24 dst 192.1.3.209/32
 	dir fwd action block priority 1564639 ptype main
-	tmpl src 0.0.0.0 dst 0.0.0.0
-		proto esp reqid REQID mode transport
 src 192.0.2.0/24 dst 192.1.3.209/32
 	dir in action block priority 1564639 ptype main
-	tmpl src 0.0.0.0 dst 0.0.0.0
-		proto esp reqid REQID mode transport
 src 192.1.2.23/32 dst 192.1.3.209/32
 	dir fwd priority 1564639 ptype main
 	tmpl src 192.1.2.23 dst 192.1.3.209
@@ -86,8 +82,6 @@ src 192.1.2.23/32 dst 192.1.3.209/32
 		proto esp reqid REQID mode tunnel
 src 192.1.3.209/32 dst 192.0.2.0/24
 	dir out action block priority 1564639 ptype main
-	tmpl src 0.0.0.0 dst 0.0.0.0
-		proto esp reqid REQID mode transport
 src 192.1.3.209/32 dst 192.1.2.23/32
 	dir out priority 1564639 ptype main
 	tmpl src 192.1.3.209 dst 192.1.2.23
@@ -107,7 +101,7 @@ Certificate Nickname                                         Trust Attributes
                                                              SSL,S/MIME,JAR/XPI
 Libreswan test CA for mainca - Libreswan                     CT,, 
 east-ec                                                      P,,  
-hashsha1                                                     P,,  
+hashsha2                                                     P,,  
 nic                                                          P,,  
 north                                                        P,,  
 road                                                         u,u,u
@@ -115,6 +109,7 @@ west                                                         P,,
 west-ec                                                      P,,  
 road #
  killall ip > /dev/null 2> /dev/null
+[1]+  Terminated              ip -s xfrm monitor > /tmp/xfrm-monitor.out
 road #
  cp /tmp/xfrm-monitor.out OUTPUT/road.xfrm-monitor.txt
 road #
@@ -133,24 +128,10 @@ road #
 "private-or-clear#192.1.2.0/24"[1] ...192.1.2.23 #2: negotiated connection [192.1.3.209-192.1.3.209:0-65535 0] -> [192.1.2.23-192.1.2.23:0-65535 0]
 road #
  grep IKEv2_AUTH_ OUTPUT/*pluto.log
-OUTPUT/east.pluto.log:| emitting 2 raw bytes of hash algorithm identifier IKEv2_AUTH_HASH_SHA2_256 into IKEv2 Notify Payload
-OUTPUT/east.pluto.log:| hash algorithm identifier IKEv2_AUTH_HASH_SHA2_256: 00 02
-OUTPUT/east.pluto.log:| emitting 2 raw bytes of hash algorithm identifier IKEv2_AUTH_HASH_SHA2_384 into IKEv2 Notify Payload
-OUTPUT/east.pluto.log:| hash algorithm identifier IKEv2_AUTH_HASH_SHA2_384: 00 03
-OUTPUT/east.pluto.log:| emitting 2 raw bytes of hash algorithm identifier IKEv2_AUTH_HASH_SHA2_512 into IKEv2 Notify Payload
-OUTPUT/east.pluto.log:| hash algorithm identifier IKEv2_AUTH_HASH_SHA2_512: 00 04
-OUTPUT/east.pluto.log:|    auth method: IKEv2_AUTH_DIGSIG (0xe)
-OUTPUT/east.pluto.log:"clear-or-private#192.1.3.0/24"[1] ...192.1.3.209 #1: Authenticated using RSA with IKEv2_AUTH_HASH_SHA2_512
-OUTPUT/east.pluto.log:|    auth method: IKEv2_AUTH_DIGSIG (0xe)
-OUTPUT/road.pluto.log:| emitting 2 raw bytes of hash algorithm identifier IKEv2_AUTH_HASH_SHA2_256 into IKEv2 Notify Payload
-OUTPUT/road.pluto.log:| hash algorithm identifier IKEv2_AUTH_HASH_SHA2_256: 00 02
-OUTPUT/road.pluto.log:| emitting 2 raw bytes of hash algorithm identifier IKEv2_AUTH_HASH_SHA2_384 into IKEv2 Notify Payload
-OUTPUT/road.pluto.log:| hash algorithm identifier IKEv2_AUTH_HASH_SHA2_384: 00 03
-OUTPUT/road.pluto.log:| emitting 2 raw bytes of hash algorithm identifier IKEv2_AUTH_HASH_SHA2_512 into IKEv2 Notify Payload
-OUTPUT/road.pluto.log:| hash algorithm identifier IKEv2_AUTH_HASH_SHA2_512: 00 04
-OUTPUT/road.pluto.log:|    auth method: IKEv2_AUTH_DIGSIG (0xe)
-OUTPUT/road.pluto.log:|    auth method: IKEv2_AUTH_DIGSIG (0xe)
-OUTPUT/road.pluto.log:"private-or-clear#192.1.2.0/24"[1] ...192.1.2.23 #2: Authenticated using RSA with IKEv2_AUTH_HASH_SHA2_512
+OUTPUT/east.pluto.log:|    auth method: IKEv2_AUTH_RSA (0x1)
+OUTPUT/east.pluto.log:|    auth method: IKEv2_AUTH_RSA (0x1)
+OUTPUT/road.pluto.log:|    auth method: IKEv2_AUTH_RSA (0x1)
+OUTPUT/road.pluto.log:|    auth method: IKEv2_AUTH_RSA (0x1)
 road #
 road #
  ../bin/check-for-core.sh

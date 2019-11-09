@@ -1,7 +1,6 @@
 /* IKEv2 send packet routines, for Libreswan
  *
- * Copyright (C) 2018-2019 Andrew Cagney <cagney@gnu.org>
- * Copyright (C) 2019 D. Hugh Redelmeier <hugh@mimosa.com>
+ * Copyright (C) 2018 Andrew Cagney
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -22,8 +21,11 @@
 #include "packet.h"		/* for pb_stream */
 
 struct msg_digest;
-struct dh_desc;
+struct oakley_group_desc;
 struct ike_sa;
+
+bool record_and_send_v2_ike_msg(struct state *st, pb_stream *pbs,
+				const char *what);
 
 bool send_recorded_v2_ike_msg(struct state *st, const char *where);
 
@@ -37,52 +39,43 @@ void send_v2N_spi_response_from_state(struct ike_sa *st,
 void send_v2N_response_from_state(struct ike_sa *st,
 				  struct msg_digest *md,
 				  v2_notification_t type,
-				  const chunk_t *data /* optional */);
+				  const chunk_t *data);
 
 void send_v2N_response_from_md(struct msg_digest *md,
 			       v2_notification_t type,
 			       const chunk_t *data);
 
-void record_v2_delete(struct state *st);
+void send_v2_delete(struct state *st);
 
-typedef bool payload_master_t(struct state *st, pb_stream *pbs);
-
-extern stf_status record_v2_informational_request(const char *name,
-						  struct ike_sa *owner,
-						  struct state *sender,
-						  payload_master_t *payloads);
+extern stf_status send_v2_informational_request(const char *name,
+						struct state *st,
+						struct ike_sa *ike,
+						stf_status (*payloads)(struct state *st,
+								       pb_stream *pbs));
 
 /*
  * Emit an IKEv2 payload.
  *
- * Like the out_*() primitives, these have the pb_stream for emission as
- * the last parameter (or second last if the last one is the pb_stream
- * for the sub-payload).
+ * Like the out_*() primitives, these have the pb_stream as the last
+ * parameter.
  */
 
 bool emit_v2UNKNOWN(const char *victim, pb_stream *outs);
 
-/* emit a v2 Notification payload, with optional SA and optional sub-payload */
-bool emit_v2Nsa_pl(v2_notification_t ntype,
+/* output a v2 Notification payload, with optional SA and optional sub-payload */
+bool out_v2Nsa_pl(v2_notification_t ntype,
 		enum ikev2_sec_proto_id protoid,
 		const ipsec_spi_t *spi, /* optional */
 		pb_stream *outs,
 		pb_stream *payload_pbs /* optional */);
 
-/* emit a v2 Notification payload, with optional sub-payload */
-/* i.e., emit header then open a containing payload? */
-bool emit_v2Npl(v2_notification_t ntype,
-		pb_stream *outs,
-		pb_stream *payload_pbs /* optional */);
-
-/* emit a v2 Notification payload, with optional hunk as sub-payload */
-bool emit_v2N_bytes(v2_notification_t ntype,
-		   const void *bytes, size_t size,
-		   pb_stream *outs);
-#define emit_v2N_hunk(NTYPE, HUNK, OUTS)	emit_v2N_bytes(NTYPE, (HUNK).ptr, (HUNK).len, OUTS)
+/* output a v2 Notification payload, with optional chunk as sub-payload */
+bool out_v2Nchunk(v2_notification_t ntype,
+		const chunk_t *ndata, /* optional */
+		pb_stream *outs);
 
 /* output a v2 simple Notification payload */
-bool emit_v2N(v2_notification_t ntype,
+bool out_v2N(v2_notification_t ntype,
 	       pb_stream *outs);
 
 bool emit_v2V(const char *string, pb_stream *outs);

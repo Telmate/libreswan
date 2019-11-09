@@ -1,7 +1,4 @@
-#once unbound work properly replace the next lines
-nic #
- sed -i 's/5353/53/' /etc/nsd/nsd.conf
-nic #
- #/testing/guestbin/swan-prep --dnssec
+/testing/guestbin/swan-prep --dnssec
+Failed to stop ipsec.service: Unit ipsec.service not loaded.
 nic #
 

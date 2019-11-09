@@ -12,7 +12,7 @@
  * Copyright (C) 2013 Antony Antony <antony@phenome.org>
  * Copyright (C) 2013 D. Hugh Redelmeier <hugh@mimosa.com>
  * Copyright (C) 2015 Paul Wouters <pwouters@redhat.com>
- * Copyright (C) 2015-2019 Andrew Cagney <cagney@gnu.org>
+ * Copyright (C) 2015,2017 Andrew Cagney <cagney@gnu.org>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -32,9 +32,8 @@
 
 #include "chunk.h"
 
-struct dh_desc;
+struct oakley_group_desc;
 struct state;
-struct msg_digest;
 
 /*
  * The DH secret (opaque, but we all know it is implemented using
@@ -42,7 +41,7 @@ struct msg_digest;
  */
 struct dh_secret;
 
-struct dh_secret *calc_dh_secret(const struct dh_desc *group,
+struct dh_secret *calc_dh_secret(const struct oakley_group_desc *group,
 				 chunk_t *ke);
 
 PK11SymKey *calc_dh_shared(struct dh_secret *secret,
@@ -55,14 +54,5 @@ void transfer_dh_secret_to_helper(struct state *st,
 				  const char *helper, struct dh_secret **secret);
 
 void free_dh_secret(struct dh_secret **secret);
-
-/*
- * Compute dh storing result in .st_shared_nss.
- */
-typedef stf_status (dh_cb)(struct state *st,
-			   struct msg_digest **md);
-
-extern void submit_dh(struct state *st, chunk_t remote_ke,
-		      dh_cb *callback, const char *name);
 
 #endif

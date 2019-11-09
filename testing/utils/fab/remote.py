@@ -1,6 +1,6 @@
 # Stuff to talk to virsh, for libreswan
 #
-# Copyright (C) 2015-2019  Andrew Cagney
+# Copyright (C) 2015-2016 Andrew Cagney <cagney@gnu.org>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by the
@@ -106,7 +106,7 @@ def path(domain, console, path):
 # Domain timeouts
 
 SHUTDOWN_TIMEOUT = 20
-START_TIMEOUT = 20
+START_TIMEOUT = 10
 LOGIN_PROMPT_TIMEOUT = 120
 
 def _wait_for_login_prompt(domain, console, timeout, also_expect=[]):
@@ -141,8 +141,6 @@ def _login(domain, console, username, password, login_timeout, password_timeout,
 
     domain.logger.debug("sending control-c+carriage return, waiting %s seconds for login or shell prompt", login_timeout)
     console.sendintr()
-    console.sendline("")
-    console.sendline("")
     console.sendline("")
     if _wait_for_login_prompt(domain, console, timeout=login_timeout,
                               also_expect=[console.prompt]) == 1:
@@ -188,24 +186,24 @@ def login(domain, console,
 
 def _start(domain, timeout):
     domain.logger.info("starting domain")
+    # Bring the machine up from scratch.
+    end_time = time.time() + timeout
     # Do not call this when the console is functional!
     console = domain.console()
     if console:
-        raise pexpect.EOF("console for domain %s already open" % domain)
-    # Bring the machine up from scratch.
-    end_time = time.time() + timeout
+        raise pexpect.TIMEOUT("console should not be open")
     first_attempt = True
     while console == None:
         if time.time() > end_time:
-            raise pexpect.EOF("trying to start domain %s" % domain)
+            pexpect.TIMEOUT("Trying to get a console")
         status, output = domain.start()
         if status and first_attempt:
             # The first attempt at starting the domain _must_ succeed.
             # Failing is a sign that the domain was running.  Further
             # attempts might fail as things get racey.
-            raise pexpect.EOF("failed to start domain %s" % output)
-        # give the VM time to start and then try opening the console.
+            raise pexpect.TIMEOUT("failed to start domain: %s" % output)
         time.sleep(1)
+        # try opening the console again
         console = domain.console()
         first_attempt = False
     domain.logger.debug("got console")

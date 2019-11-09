@@ -1,7 +1,6 @@
 /* double linked list, for libreswan
  *
- * Copyright (C) 2015-2019 Andrew Cagney <cagney@gnu.org>
- * Copyright (C) 2019 D. Hugh Redelmeier <hugh@mimosa.com>
+ * Copyright (C) 2015, 2017 Andrew Cagney
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -14,16 +13,17 @@
  * for more details.
  */
 
-#ifndef LIST_ENTRY_H
-#define LIST_ENTRY_H
+#ifndef _list_entry_h_
+#define _list_entry_h_
 
 /*
  * Description of a list entry, used for logging.
  */
 
 struct list_info {
+	lset_t debug;
 	const char *name;
-	void (*jam)(struct lswlog *buf, const void *data);
+	size_t (*log)(struct lswlog *buf, void *data);
 };
 
 /*
@@ -31,22 +31,13 @@ struct list_info {
  *
  * Since these are stored directly in the list object there is less
  * memory management overhead.
-
- * Each list is represented as a doubly-linked cycle, with a
- * distinguished element we call the head.  The head is the
- * only element with .data == NULL.  This acts as a sentinel.
  *
- * For a list_head.head, before initialization, the list head's .newer and
- * .older must be NULL.  After initialization .newer points to the oldest
- * list_entry (list_head.head, if the list is empty) and .older points
- * to the newest.  This seems contradictory, but it serves to bend time
- * into a cycle.
+ * The list head is an empty list_entry (data is NULL) where .older is
+ * in new-to-old order and .newer is in old-to-new order.  Since the
+ * lists link back to head .data == NULL acts as a sentinel.
  *
- * For a regular list_entry, .newer and .older are NULL when the the entry
- * is detached from any list.  Otherwise both must be non-NULL.
- *
- * Currently all elements of a list must have identical .info values.
- * This could easily be changed if we needed heterogenous lists.
+ * When the list is empty, head's .newer and .older are both forced to
+ * NULL.  It makes debugging easier.
  */
 
 struct list_entry {
@@ -55,8 +46,6 @@ struct list_entry {
 	void *data;
 	const struct list_info *info;
 };
-
-void jam_list_entry(struct lswlog *buf, const struct list_entry *entry);
 
 /*
  * Double linked list HEAD.
@@ -70,19 +59,16 @@ void init_list(const struct list_info *info, struct list_head *list);
 struct list_entry list_entry(const struct list_info *info, void *data);
 
 /*
- * detached_list_entry: test whether an entry is on any list.
- * insert_list_entry: Insert an entry at the front of the list.
- * remove_list_entry: remove the entry from anywhere in the list.
- * The macros *OLD2NEW() and *NEW2OLD(), below, expose the ordering.
+ * Insert (at front) or remove the object from the linked list.  The
+ * macros *OLD2NEW() and *NEW2OLD(), below, determine the apparent
+ * ordering.
  *
  * These operations are O(1).
  */
 
-bool detached_list_entry(const struct list_entry *entry);
-
 void insert_list_entry(struct list_head *list,
 		       struct list_entry *entry);
-void remove_list_entry(struct list_entry *entry);
+bool remove_list_entry(struct list_entry *entry);
 
 /*
  * Iterate through all the entries in the list in either old-to-new or

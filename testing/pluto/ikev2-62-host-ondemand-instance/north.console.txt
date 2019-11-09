@@ -1,7 +1,7 @@
 /testing/guestbin/swan-prep
 north #
  ipsec start
-Redirecting to: [initsystem]
+Redirecting to: systemctl start ipsec.service
 north #
  /testing/pluto/bin/wait-until-pluto-started
 north #

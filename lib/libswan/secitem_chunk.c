@@ -14,6 +14,7 @@
  * for more details.
  */
 
+#include <libreswan.h>
 #include <lswalloc.h>
 #include "nss.h"
 #include "secrets.h"

@@ -1,7 +1,7 @@
 certutil -L -d sql:/etc/ipsec.d
 # catch any cert chain specific leaks
 ipsec whack --shutdown
-grep -e leak /tmp/pluto.log | grep -v -e '|'
+grep leak /tmp/pluto.log
 : ==== cut ====
 ipsec auto --status
 : ==== tuc ====

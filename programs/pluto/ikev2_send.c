@@ -6,12 +6,12 @@
  * Copyright (C) 2008-2009 David McCullough <david_mccullough@securecomputing.com>
  * Copyright (C) 2010,2012 Avesh Agarwal <avagarwa@redhat.com>
  * Copyright (C) 2010 Tuomo Soini <tis@foobar.fi
- * Copyright (C) 2012-2019 Paul Wouters <pwouters@redhat.com>
+ * Copyright (C) 2012-2017 Paul Wouters <pwouters@redhat.com>
  * Copyright (C) 2012-2017 Antony Antony <antony@phenome.org>
- * Copyright (C) 2013-2019 D. Hugh Redelmeier <hugh@mimosa.com>
+ * Copyright (C) 2013-2016 D. Hugh Redelmeier <hugh@mimosa.com>
  * Copyright (C) 2013 David McCullough <ucdevel@gmail.com>
  * Copyright (C) 2013 Matt Rogers <mrogers@redhat.com>
- * Copyright (C) 2015-2019 Andrew Cagney <cagney@gnu.org>
+ * Copyright (C) 2015-2017 Andrew Cagney
  * Copyright (C) 2017 Sahana Prasad <sahana.prasad07@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -39,6 +39,13 @@
 #include "demux.h"	/* for struct msg_digest */
 #include "rnd.h"
 
+bool record_and_send_v2_ike_msg(struct state *st, pb_stream *pbs,
+				const char *what)
+{
+	record_outbound_ike_msg(st, pbs, what);
+	return send_recorded_v2_ike_msg(st, what);
+}
+
 bool send_recorded_v2_ike_msg(struct state *st, const char *where)
 {
 	if (st->st_interface == NULL) {
@@ -57,6 +64,7 @@ bool send_recorded_v2_ike_msg(struct state *st, const char *where)
 				return false;
 			}
 			nr_frags++;
+
 		}
 		dbg("sent %u fragments", nr_frags);
 		return true;
@@ -133,8 +141,8 @@ bool emit_v2V(const char *string, pb_stream *outs)
  */
 
 
-/* emit a v2 Notification payload, with optional SA and optional sub-payload */
-bool emit_v2Nsa_pl(v2_notification_t ntype,
+/* output a v2 Notification payload, with optional SA and optional sub-payload */
+bool out_v2Nsa_pl(v2_notification_t ntype,
 		enum ikev2_sec_proto_id protoid,
 		const ipsec_spi_t *spi, /* optional */
 		pb_stream *outs,
@@ -181,38 +189,34 @@ bool emit_v2Nsa_pl(v2_notification_t ntype,
 	return true;
 }
 
-/* emit a v2 Notification payload, with optional sub-payload */
-bool emit_v2Npl(v2_notification_t ntype,
+/* output a v2 Notification payload, with sub-payload */
+static bool out_v2Npl(v2_notification_t ntype,
 		pb_stream *outs,
-		pb_stream *payload_pbs /* optional */)
+		pb_stream *payload_pbs)
 {
-	return emit_v2Nsa_pl(ntype, PROTO_v2_RESERVED, NULL, outs, payload_pbs);
+	return out_v2Nsa_pl(ntype, PROTO_v2_RESERVED, NULL, outs, payload_pbs);
 }
 
-/* emit a v2 Notification payload, with bytes as sub-payload */
-bool emit_v2N_bytes(v2_notification_t ntype,
-		    const void *bytes, size_t size, /* optional */
-		    pb_stream *outs)
+/* output a v2 Notification payload, with optional chunk as sub-payload */
+bool out_v2Nchunk(v2_notification_t ntype,
+		const chunk_t *ndata, /* optional */
+		pb_stream *outs)
 {
 	pb_stream pl;
-	if (!emit_v2Npl(ntype, outs, &pl)) {
-		return false;
-	}
 
-	/* for some reason out_raw() doesn't like size==0 */
-	if (size > 0 && !out_raw(bytes, size, &pl, "Notify data")) {
+	if (!out_v2Npl(ntype, outs, &pl) ||
+	    (ndata != NULL && !out_chunk(*ndata, &pl, "Notify data")))
 		return false;
-	}
 
 	close_output_pbs(&pl);
 	return true;
 }
 
 /* output a v2 simple Notification payload */
-bool emit_v2N(v2_notification_t ntype,
+bool out_v2N(v2_notification_t ntype,
 	       pb_stream *outs)
 {
-	return emit_v2Npl(ntype, outs, NULL);
+	return out_v2Nchunk(ntype, NULL, outs);
 }
 
 bool emit_v2N_signature_hash_algorithms(lset_t sighash_policy,
@@ -220,7 +224,7 @@ bool emit_v2N_signature_hash_algorithms(lset_t sighash_policy,
 {
 	pb_stream n_pbs;
 
-	if (!emit_v2Npl(v2N_SIGNATURE_HASH_ALGORITHMS, outs, &n_pbs)) {
+	if (!out_v2Npl(v2N_SIGNATURE_HASH_ALGORITHMS, outs, &n_pbs)) {
 		libreswan_log("error initializing notify payload for notify message");
 		return false;
 	}
@@ -254,13 +258,8 @@ bool emit_v2N_signature_hash_algorithms(lset_t sighash_policy,
 /*
  * This short/sharp notification is always tied to the IKE SA.
  *
- * For a CREATE_CHILD_SA, things have presumably screwed up so badly
+ * For a CREATE_CHILD_SA, things have presumably screwed up so bad
  * that the larval child state is deleted.
- *
- * XXX: suspect calls to this function should be replaced by something
- * like record_v2N_spi_response_from_state() - so that the response is
- * always saved in the state and re-transmits can be handled
- * correctly.
  */
 
 void send_v2N_spi_response_from_state(struct ike_sa *ike,
@@ -270,25 +269,17 @@ void send_v2N_spi_response_from_state(struct ike_sa *ike,
 				      v2_notification_t ntype,
 				      const chunk_t *ndata /* optional */)
 {
-	/*
-	 * The caller must have computed DH and SKEYSEED; but may not
-	 * have authenticated (i.e., don't assume that the IKE SA has
-	 * "established").
-	 */
-	if (!pexpect(ike->sa.hidden_variables.st_skeyid_calculated)) {
-		return;
-	}
-
 	passert(v2_msg_role(md) == MESSAGE_REQUEST); /* always responding */
 	const char *const notify_name = enum_short_name(&ikev2_notify_names, ntype);
 
 	enum isakmp_xchg_types exchange_type = md->hdr.isa_xchg;
 	const char *const exchange_name = enum_short_name(&ikev2_exchange_names, exchange_type);
 
-	endpoint_buf b;
-	libreswan_log("responding to %s message (ID %u) from %s with encrypted notification %s",
+	ipstr_buf b;
+	libreswan_log("responding to %s message (ID %u) from %s:%u with encrypted notification %s",
 		      exchange_name, md->hdr.isa_msgid,
-		      str_sensitive_endpoint(&ike->sa.st_remote_endpoint, &b),
+		      sensitive_ipstr(&ike->sa.st_remoteaddr, &b),
+		      ike->sa.st_remoteport,
 		      notify_name);
 
 	/*
@@ -339,11 +330,11 @@ void send_v2N_spi_response_from_state(struct ike_sa *ike,
 		 * the SPI field of the notification is set to match
 		 * the SPI of the Child SA.
 		*/
-		PEXPECT_LOG("trying to send unimplemented %s notification",
+		PEXPECT_LOG("trying to send inimplemented %s notifiation",
 			    notify_name);
 		return;
 	case v2N_REKEY_SA:
-		PEXPECT_LOG("%s notification cannot be part of a response",
+		PEXPECT_LOG("%s notification is never part of a response",
 			    notify_name);
 		return;
 	default:
@@ -351,7 +342,7 @@ void send_v2N_spi_response_from_state(struct ike_sa *ike,
 	}
 
 	pb_stream n_pbs;
-	if (!emit_v2Nsa_pl(ntype, protoid, spi, &sk.pbs, &n_pbs) ||
+	if (!out_v2Nsa_pl(ntype, protoid, spi, &sk.pbs, &n_pbs) ||
 	    (ndata != NULL && !out_chunk(*ndata, &n_pbs, "Notify data"))) {
 		return;
 	}
@@ -388,7 +379,7 @@ void send_v2N_spi_response_from_state(struct ike_sa *ike,
 void send_v2N_response_from_state(struct ike_sa *ike,
 				  struct msg_digest *md,
 				  v2_notification_t ntype,
-				  const chunk_t *ndata /* optional */)
+				  const chunk_t *ndata)
 {
 	send_v2N_spi_response_from_state(ike, md, PROTO_v2_RESERVED, NULL/*SPI*/,
 					 ntype, ndata);
@@ -416,11 +407,12 @@ void send_v2N_response_from_md(struct msg_digest *md,
 		    exchange_type);
 	}
 
-	endpoint_buf b;
-	libreswan_log("responding to %s (%d) message (Message ID %u) from %s with unencrypted notification %s",
+	ipstr_buf b;
+	libreswan_log("responding to %s (%d) message (Message ID %u) from %s:%u with unencrypted notification %s",
 		      exchange_name, exchange_type,
 		      md->hdr.isa_msgid,
-		      str_sensitive_endpoint(&md->sender, &b),
+		      sensitive_ipstr(&md->sender, &b),
+		      hportof(&md->sender),
 		      notify_name);
 
 	/*
@@ -451,8 +443,7 @@ void send_v2N_response_from_md(struct msg_digest *md,
 	}
 
 	/* build and add v2N payload to the packet */
-	chunk_t nhunk = ndata == NULL ? empty_chunk : *ndata;
-	if (!emit_v2N_hunk(ntype, nhunk, &rbody)) {
+	if (!out_v2Nchunk(ntype, ndata, &rbody)) {
 		PEXPECT_LOG("error building unencrypted %s %s notification with message ID %u",
 			    exchange_name, notify_name, md->hdr.isa_msgid);
 		return;
@@ -481,7 +472,7 @@ void send_v2N_response_from_md(struct msg_digest *md,
  * Deleting an IKE SA is a bigger deal than deleting an IPsec SA.
  */
 
-void record_v2_delete(struct state *const st)
+void send_v2_delete(struct state *const st)
 {
 	struct ike_sa *ike = ike_sa(st);
 	if (ike == NULL) {
@@ -555,22 +546,27 @@ void record_v2_delete(struct state *const st)
 		return;
 	}
 
-	record_outbound_ike_msg(st, &packet, "packet for ikev2 delete informational");
+	record_and_send_v2_ike_msg(st, &packet,
+				   "packet for ikev2 delete informational");
+
+	/* increase message ID for next delete message */
+	/* ikev2_update_msgid_counters need an md */
+	ike->sa.st_msgid_nextuse++;
+	st->st_msgid = ike->sa.st_msgid_nextuse;
 }
 
 /*
  * Construct and send an informational request.
  *
- * XXX: This and record_v2_delete() should be merged.  However, there
- * are annoying differences.  For instance, record_v2_delete() updates
+ * XXX: This and send_v2_delete() should be merged.  However, there
+ * are annoying differences.  For instance, send_v2_delete() updates
  * st->st_msgid but the below doesn't.
- *
- * XXX: but st_msgid isn't used so have things changed?
  */
-stf_status record_v2_informational_request(const char *name,
-					   struct ike_sa *ike,
-					   struct state *sender,
-					   payload_master_t *payloads)
+stf_status send_v2_informational_request(const char *name,
+					 struct state *st,
+					 struct ike_sa *ike,
+					 stf_status (*payloads)(struct state *st,
+								pb_stream *pbs))
 {
 	/*
 	 * Buffer in which to marshal our informational message.  We
@@ -591,9 +587,18 @@ stf_status record_v2_informational_request(const char *name,
 	}
 
 	v2SK_payload_t sk = open_v2SK_payload(&message, ike);
-	if (!pbs_ok(&sk.pbs) ||
-	    (payloads != NULL && !payloads(sender, &sk.pbs)) ||
-	    !close_v2SK_payload(&sk)) {
+	if (!pbs_ok(&sk.pbs)) {
+		return STF_INTERNAL_ERROR;
+	}
+
+	if (payloads != NULL) {
+		stf_status e = payloads(st, &sk.pbs);
+		if (e != STF_OK) {
+			return  e;
+		}
+	}
+
+	if (!close_v2SK_payload(&sk)) {
 		return STF_INTERNAL_ERROR;
 	}
 	close_output_pbs(&message);
@@ -604,7 +609,12 @@ stf_status record_v2_informational_request(const char *name,
 		return ret;
 	}
 
+	/* cannot use ikev2_update_msgid_counters - no md here */
+	/* But we know we are the initiator for thie exchange */
+	ike->sa.st_msgid_nextuse += 1;
+
 	ike->sa.st_pend_liveness = TRUE; /* we should only do this when dpd/liveness is active? */
-	record_outbound_ike_msg(sender, &packet, name);
+	record_and_send_v2_ike_msg(st, &packet, name);
+
 	return STF_OK;
 }

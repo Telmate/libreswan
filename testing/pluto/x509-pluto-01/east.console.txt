@@ -5,7 +5,7 @@ east #
 certutil: could not find certificate named "mainca": SEC_ERROR_...
 east #
  ipsec start
-Redirecting to: [initsystem]
+Redirecting to: systemctl start ipsec.service
 east #
  /testing/pluto/bin/wait-until-pluto-started
 east #
@@ -13,11 +13,12 @@ east #
 002 added connection description "westnet-eastnet-x509-nosend"
 east #
  ipsec auto --status | grep westnet-eastnet-x509-nosend
-000 "westnet-eastnet-x509-nosend": 192.0.2.0/24===192.1.2.23<192.1.2.23>[C=CA, ST=Ontario, L=Toronto, O=Libreswan, OU=Test Department, CN=east.testing.libreswan.org, E=user-east@testing.libreswan.org,+S-C]...192.1.2.45<192.1.2.45>[C=CA, ST=Ontario, L=Toronto, O=Libreswan, OU=Test Department, CN=west.testing.libreswan.org, E=user-west@testing.libreswan.org]===192.0.1.0/24; unrouted; eroute owner: #0
+000 "westnet-eastnet-x509-nosend": 192.0.2.0/24===192.1.2.23<192.1.2.23>[C=CA, ST=Ontario, L=Toronto, O=Libreswan, OU=Test Department, CN=east.testing.libreswan.org, E=user-east@testing.libreswan.org,+S-C]...192.1.2.45<192.1.2.45>[C=CA, ST=Ontario, L=Toronto, O=Libreswan, OU=Test Department, CN=west.testing.libreswan.org, E=user-west@testing.libreswan.org,+S-C]===192.0.1.0/24; unrouted; eroute owner: #0
 000 "westnet-eastnet-x509-nosend":     oriented; my_ip=192.0.2.254; their_ip=192.0.1.254; mycert=east; hiscert=west; my_updown=ipsec _updown;
 000 "westnet-eastnet-x509-nosend":   xauth us:none, xauth them:none,  my_username=[any]; their_username=[any]
 000 "westnet-eastnet-x509-nosend":   our auth:rsasig, their auth:rsasig
 000 "westnet-eastnet-x509-nosend":   modecfg info: us:none, them:none, modecfg policy:push, dns:unset, domains:unset, banner:unset, cat:unset;
+000 "westnet-eastnet-x509-nosend":   labeled_ipsec:no;
 000 "westnet-eastnet-x509-nosend":   policy_label:unset;
 000 "westnet-eastnet-x509-nosend":   CAs: 'C=CA, ST=Ontario, L=Toronto, O=Libreswan, OU=Test Department, CN=Libreswan test CA for mainca, E=testing@libreswan.org'...'C=CA, ST=Ontario, L=Toronto, O=Libreswan, OU=Test Department, CN=Libreswan test CA for mainca, E=testing@libreswan.org'
 000 "westnet-eastnet-x509-nosend":   ike_life: 3600s; ipsec_life: 28800s; replay_window: 32; rekey_margin: 540s; rekey_fuzz: 100%; keyingtries: 0;
@@ -67,12 +68,13 @@ default via 192.1.2.254 dev eth1
 192.0.1.0/24 dev eth1 scope link src 192.0.2.254
 192.0.2.0/24 dev eth0 proto kernel scope link src 192.0.2.254
 192.1.2.0/24 dev eth1 proto kernel scope link src 192.1.2.23
+192.9.2.0/24 dev eth2 proto kernel scope link src 192.9.2.23
 NSS_CERTIFICATES
 Certificate Nickname                                         Trust Attributes
                                                              SSL,S/MIME,JAR/XPI
 Libreswan test CA for mainca - Libreswan                     CT,, 
 east                                                         u,u,u
-hashsha1                                                     P,,  
+hashsha2                                                     P,,  
 nic                                                          P,,  
 north                                                        P,,  
 road                                                         P,,  

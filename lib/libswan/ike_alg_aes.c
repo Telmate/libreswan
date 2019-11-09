@@ -6,7 +6,6 @@
  * Copyright (C) 2013 Florian Weimer <fweimer@redhat.com>
  * Copyright (C) 2013 D. Hugh Redelmeier <hugh@mimosa.com>
  * Copyright (C) 2014-2018 Andrew Cagney <andrew.cagney@gmail.com>
- * Copyright (C) 2019 Paul Wouters <pwouters@redhat.com>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -24,11 +23,11 @@
 #include "constants.h"		/* for BYTES_FOR_BITS() */
 #include "ietf_constants.h"
 #include "ike_alg.h"
-#include "ike_alg_prf_mac_ops.h"
-#include "ike_alg_prf_ikev1_ops.h"
-#include "ike_alg_prf_ikev2_ops.h"
+#include "ike_alg_encrypt_nss_cbc_ops.h"
+#include "ike_alg_encrypt_nss_ctr_ops.h"
+#include "ike_alg_encrypt_nss_gcm_ops.h"
+#include "ike_alg_prf_nss_xcbc_ops.h"
 #include "ike_alg_encrypt.h"
-#include "ike_alg_encrypt_ops.h"
 #include "ike_alg_integ.h"
 #include "ike_alg_prf.h"
 #include "sadb.h"
@@ -37,7 +36,7 @@ const struct encrypt_desc ike_alg_encrypt_aes_cbc = {
 	.common = {
 		.name = "aes",
 		.fqn = "AES_CBC",
-		.names = "aes,aes_cbc",
+		.names = { "aes", "aes_cbc", },
 		.algo_type =   IKE_ALG_ENCRYPT,
 		.id = {
 			[IKEv1_OAKLEY_ID] = OAKLEY_AES_CBC,
@@ -72,7 +71,7 @@ const struct encrypt_desc ike_alg_encrypt_aes_ctr =
 	.common = {
 		.name = "aes_ctr",
 		.fqn = "AES_CTR",
-		.names = "aesctr,aes_ctr",
+		.names = { "aesctr", "aes_ctr", },
 		.algo_type =   IKE_ALG_ENCRYPT,
 		.id = {
 			[IKEv1_OAKLEY_ID] = OAKLEY_AES_CTR,
@@ -105,7 +104,7 @@ const struct encrypt_desc ike_alg_encrypt_aes_gcm_8 =
 	.common = {
 		.name = "aes_gcm_8",
 		.fqn = "AES_GCM_8",
-		.names = "aes_gcm_8,aes_gcm_a",
+		.names = { "aes_gcm_8", "aes_gcm_a" },
 		/* XXX: aes_gcm_16 has aes_gcm as alias */
 		.algo_type =   IKE_ALG_ENCRYPT,
 		.id = {
@@ -143,7 +142,7 @@ const struct encrypt_desc ike_alg_encrypt_aes_gcm_12 =
 	.common = {
 		.name = "aes_gcm_12",
 		.fqn = "AES_GCM_12",
-		.names = "aes_gcm_12,aes_gcm_b",
+		.names = { "aes_gcm_12", "aes_gcm_b" },
 		.algo_type =   IKE_ALG_ENCRYPT,
 		.id = {
 			[IKEv1_OAKLEY_ID] = -1,
@@ -181,7 +180,7 @@ const struct encrypt_desc ike_alg_encrypt_aes_gcm_16 =
 		.name = "aes_gcm_16",
 		.fqn = "AES_GCM_16",
 		/* aes_gcm_8 has aes_gcm as officname */
-		.names = "aes_gcm,aes_gcm_16,aes_gcm_c",
+		.names = { "aes_gcm", "aes_gcm_16", "aes_gcm_c" },
 		.algo_type =  IKE_ALG_ENCRYPT,
 		.id = {
 			[IKEv1_OAKLEY_ID] = -1,
@@ -225,7 +224,7 @@ const struct encrypt_desc ike_alg_encrypt_aes_ccm_8 =
 	.common = {
 		.name = "aes_ccm_8",
 		.fqn = "AES_CCM_8",
-		.names = "aes_ccm_8,aes_ccm_a",
+		.names = { "aes_ccm_8", "aes_ccm_a" },
 		.algo_type =    IKE_ALG_ENCRYPT,
 		.id = {
 			[IKEv1_OAKLEY_ID] = -1,
@@ -256,7 +255,7 @@ const struct encrypt_desc ike_alg_encrypt_aes_ccm_12 =
 	.common = {
 		.name = "aes_ccm_12",
 		.fqn = "AES_CCM_12",
-		.names = "aes_ccm_12,aes_ccm_b",
+		.names = { "aes_ccm_12", "aes_ccm_b" },
 		.algo_type =    IKE_ALG_ENCRYPT,
 		.id = {
 			[IKEv1_OAKLEY_ID] = -1,
@@ -287,7 +286,7 @@ const struct encrypt_desc ike_alg_encrypt_aes_ccm_16 =
 	.common = {
 		.name = "aes_ccm_16",
 		.fqn = "AES_CCM_16",
-		.names = "aes_ccm,aes_ccm_16,aes_ccm_c",
+		.names = { "aes_ccm", "aes_ccm_16", "aes_ccm_c" },
 		.algo_type =   IKE_ALG_ENCRYPT,
 		.id = {
 			[IKEv1_OAKLEY_ID] = -1,
@@ -317,23 +316,21 @@ const struct prf_desc ike_alg_prf_aes_xcbc = {
 	.common = {
 		.name = "aes_xcbc",
 		.fqn = "AES_XCBC",
-		.names = "aes128_xcbc,aes_xcbc",
+		.names = { "aes128_xcbc", "aes_xcbc", },
 		.algo_type = IKE_ALG_PRF,
 		.id = {
 			[IKEv1_OAKLEY_ID] = -1,
 			[IKEv1_ESP_ID] = -1,
 			[IKEv2_ALG_ID] = IKEv2_PRF_AES128_XCBC,
 		},
-		.fips = false,
+		.fips = true,
 	},
 	.nss = {
 		.mechanism = CKM_AES_ECB,
 	},
 	.prf_key_size = BYTES_FOR_BITS(128),
 	.prf_output_size = BYTES_FOR_BITS(128),
-	.prf_mac_ops = &ike_alg_prf_mac_nss_xcbc_ops,
-	.prf_ikev1_ops = &ike_alg_prf_ikev1_mac_ops,
-	.prf_ikev2_ops = &ike_alg_prf_ikev2_mac_ops,
+	.prf_ops = &ike_alg_prf_nss_xcbc_ops,
 	.prf_ike_audit_name = "aes_xcbc",
 };
 
@@ -341,14 +338,14 @@ const struct integ_desc ike_alg_integ_aes_xcbc = {
 	.common = {
 		.name = "aes_xcbc",
 		.fqn = "AES_XCBC_96",
-		.names = "aes_xcbc,aes128_xcbc,aes_xcbc_96,aes128_xcbc_96",
+		.names = { "aes_xcbc", "aes128_xcbc", "aes_xcbc_96", "aes128_xcbc_96", },
 		.algo_type = IKE_ALG_INTEG,
 		.id = {
 			[IKEv1_OAKLEY_ID] = -1,
 			[IKEv1_ESP_ID] = AUTH_ALGORITHM_AES_XCBC,
 			[IKEv2_ALG_ID] = IKEv2_AUTH_AES_XCBC_96,
 		},
-		.fips = false,
+		.fips = TRUE,
 	},
 	.integ_keymat_size = AES_XCBC_DIGEST_SIZE,
 	.integ_output_size = AES_XCBC_DIGEST_SIZE_TRUNC, /* XXX 96 */
@@ -369,14 +366,14 @@ const struct integ_desc ike_alg_integ_aes_cmac = {
 	.common = {
 		.name = "aes_cmac",
 		.fqn = "AES_CMAC_96",
-		.names = "aes_cmac,aes_cmac_96",
+		.names = { "aes_cmac", "aes_cmac_96", },
 		.algo_type = IKE_ALG_INTEG,
 		.id = {
 			[IKEv1_OAKLEY_ID] = -1,
 			[IKEv1_ESP_ID] = AUTH_ALGORITHM_AES_CMAC_96,
 			[IKEv2_ALG_ID] = IKEv2_AUTH_AES_CMAC_96,
 		},
-		.fips = true,
+		.fips = TRUE,
 	},
 	.integ_keymat_size = BYTES_FOR_BITS(128),
 	.integ_output_size = BYTES_FOR_BITS(96), /* truncated */
@@ -398,14 +395,13 @@ const struct encrypt_desc ike_alg_encrypt_null_integ_aes_gmac = {
 	.common = {
 		.name = "aes_gmac",
 		.fqn = "NULL_AUTH_AES_GMAC",
-		.names = "null_auth_aes_gmac,aes_gmac",
+		.names = { "null_auth_aes_gmac", "aes_gmac", },
 		.algo_type = IKE_ALG_ENCRYPT,
 		.id = {
 			[IKEv1_OAKLEY_ID] = -1,
 			[IKEv1_ESP_ID] = ESP_NULL_AUTH_AES_GMAC,
 			[IKEv2_ALG_ID] = IKEv2_ENCR_NULL_AUTH_AES_GMAC,
 		},
-		.fips = true,
 	},
 	.enc_blocksize = AES_BLOCK_SIZE,
 	.wire_iv_size = 8,

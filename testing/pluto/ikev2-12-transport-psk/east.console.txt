@@ -1,7 +1,7 @@
 /testing/guestbin/swan-prep
 east #
  ipsec start
-Redirecting to: [initsystem]
+Redirecting to: systemctl start ipsec.service
 east #
  /testing/pluto/bin/wait-until-pluto-started
 east #
@@ -14,6 +14,7 @@ east #
 000 "ipv4-psk-ikev2-transport":   xauth us:none, xauth them:none,  my_username=[any]; their_username=[any]
 000 "ipv4-psk-ikev2-transport":   our auth:secret, their auth:secret
 000 "ipv4-psk-ikev2-transport":   modecfg info: us:none, them:none, modecfg policy:push, dns:unset, domains:unset, banner:unset, cat:unset;
+000 "ipv4-psk-ikev2-transport":   labeled_ipsec:no;
 000 "ipv4-psk-ikev2-transport":   policy_label:unset;
 000 "ipv4-psk-ikev2-transport":   ike_life: 3600s; ipsec_life: 28800s; replay_window: 32; rekey_margin: 540s; rekey_fuzz: 100%; keyingtries: 0;
 000 "ipv4-psk-ikev2-transport":   retransmit-interval: 9999ms; retransmit-timeout: 99s;
@@ -58,6 +59,7 @@ default via 192.1.2.254 dev eth1
 192.0.1.0/24 via 192.1.2.45 dev eth1
 192.0.2.0/24 dev eth0 proto kernel scope link src 192.0.2.254
 192.1.2.0/24 dev eth1 proto kernel scope link src 192.1.2.23
+192.9.2.0/24 dev eth2 proto kernel scope link src 192.9.2.23
 NSS_CERTIFICATES
 Certificate Nickname                                         Trust Attributes
                                                              SSL,S/MIME,JAR/XPI

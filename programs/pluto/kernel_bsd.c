@@ -34,12 +34,12 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#include <libreswan.h>
 
 #include "sysdep.h"
 #include "socketwrapper.h"
 #include "constants.h"
 #include "lswlog.h"
-#include "ip_info.h"
 
 #include "defs.h"
 #include "rnd.h"
@@ -128,11 +128,12 @@ struct raw_iface *find_raw_ifaces4(void)
 
 	/* bind the socket */
 	{
-		ip_address anya = address_any(&ipv4_info);
-		ip_endpoint any = endpoint(&anya, 0);
-		ip_sockaddr any_sa;
-		size_t any_sa_len = endpoint_to_sockaddr(&any, &any_sa);
-		if (bind(master_sock, &any_sa.sa, any_sa_len) < 0)
+		ip_address any;
+
+		happy(anyaddr(AF_INET, &any));
+		setportof(htons(pluto_port), &any);
+		if (bind(master_sock, sockaddrof(&any),
+			 sockaddrlenof(&any)) < 0)
 			EXIT_LOG_ERRNO(errno, "bind() failed in find_raw_ifaces4()");
 	}
 
@@ -208,7 +209,9 @@ struct raw_iface *find_raw_ifaces4(void)
 		if (rs->sin_addr.s_addr == 0)
 			continue;
 
-		ri.addr = address_from_in_addr(&rs->sin_addr);
+		happy(initaddr((const void *)&rs->sin_addr,
+			       sizeof(struct in_addr),
+			       AF_INET, &ri.addr));
 
 		DBG(DBG_CONTROL, {
 			ipstr_buf b;

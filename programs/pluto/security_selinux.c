@@ -1,6 +1,5 @@
 /* selinux routines
  * Copyright (C) 2011 Avesh Agarwal <avagarwa@redhat.com>
- * Copyright (C) 2019 Andrew Cagney <cagney@gnu.org>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -22,16 +21,16 @@ static int selinux_ready = 0;
 void init_avc(void)
 {
 	if (!is_selinux_enabled()) {
-		libreswan_log("selinux support is NOT enabled.");
+		DBG_log("selinux support is NOT enabled.");
 		return;
 	} else {
-		libreswan_log("selinux support is enabled.");
+		DBG_log("selinux support is enabled.");
 	}
 
 	if (avc_init("libreswan", NULL, NULL, NULL, NULL) == 0)
 		selinux_ready = 1;
 	else
-		libreswan_log("selinux: could not initialize avc.");
+		DBG_log("selinux: could not initialize avc.");
 }
 
 int within_range(security_context_t sl, security_context_t range)
@@ -45,7 +44,7 @@ int within_range(security_context_t sl, security_context_t range)
 
 	if (!selinux_ready) {
 		/* mls may not be enabled */
-		dbg("selinux check failed");
+		DBG_log("selinux check failed");
 		return 0;
 	}
 
@@ -54,12 +53,14 @@ int within_range(security_context_t sl, security_context_t range)
 	 */
 	rtn = avc_context_to_sid(sl, &slsid);
 	if (rtn != 0) {
-		dbg("within_range: Unable to retrieve sid for sl context (%s)", sl);
+		DBG_log("within_range: Unable to retrieve sid for sl context (%s)",
+			sl);
 		return 0;
 	}
 	rtn = avc_context_to_sid(range, &rangesid);
 	if (rtn != 0) {
-		dbg("within_range: Unable to retrieve sid for range context (%s)", range);
+		DBG_log("within_range: Unable to retrieve sid for range context (%s)",
+			range);
 		sidput(slsid);
 		return 0;
 	}
@@ -71,11 +72,13 @@ int within_range(security_context_t sl, security_context_t range)
 	av = string_to_av_perm(tclass, "polmatch");
 	rtn = avc_has_perm(slsid, rangesid, tclass, av, NULL, &avd);
 	if (rtn != 0) {
-		dbg("within_range: The sl (%s) is not within range of (%s)", sl, range);
+		DBG_log("within_range: The sl (%s) is not within range of (%s)", sl,
+			range);
 		sidput(slsid);
 		sidput(rangesid);
 		return 0;
 	}
-	dbg("within_range: The sl (%s) is within range of (%s)", sl, range);
+	DBG_log("within_range: The sl (%s) is within range of (%s)", sl,
+		range);
 	return 1;
 }

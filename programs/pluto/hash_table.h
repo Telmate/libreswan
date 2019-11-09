@@ -1,6 +1,6 @@
 /* hash table and linked lists, for libreswan
  *
- * Copyright (C) 2015, 2017, 2019 Andrew Cagney
+ * Copyright (C) 2015, 2017 Andrew Cagney
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -17,19 +17,14 @@
 #define _hash_table_h_
 
 #include "list_entry.h"
-#include "shunk.h"		/* has constant ptr */
 
 /*
  * Generic hash table.
  */
 
-typedef struct { unsigned hash; } hash_t;
-extern const hash_t zero_hash;
-
 struct hash_table {
 	const struct list_info info;
-	hash_t (*hasher)(const void *data);
-	struct list_entry *(*entry)(void *data);
+	size_t (*hash)(void *data);
 	long nr_entries; /* approx? */
 	unsigned long nr_slots;
 	struct list_head *slots;
@@ -37,17 +32,16 @@ struct hash_table {
 
 void init_hash_table(struct hash_table *table);
 
-hash_t hasher(shunk_t data, hash_t hash);
-
 /*
  * Maintain the table.
  *
  * Use the terms "add" and "del" as this table has no implied
- * ordering.  rehash does "del" then "add".
+ * ordering.
  */
-void add_hash_table_entry(struct hash_table *table, void *data);
-void del_hash_table_entry(struct hash_table *table, void *data);
-void rehash_table_entry(struct hash_table *table, void *data);
+void add_hash_table_entry(struct hash_table *table,
+			  void *data, struct list_entry *entry);
+void del_hash_table_entry(struct hash_table *table,
+			  struct list_entry *entry);
 
 /*
  * Return the head of the list entries that match HASH.
@@ -55,9 +49,10 @@ void rehash_table_entry(struct hash_table *table, void *data);
  * Use this, in conjunction with FOR_EACH_LIST_ENTRY, when searching.
  *
  * Don't forget to also check that the object itself matches - more
- * than one hash can map to the same list of entries.
+ * than one hash can map to the one list of entries.
  */
 
-struct list_head *hash_table_bucket(struct hash_table *table, hash_t hash);
+struct list_head *hash_table_slot_by_hash(struct hash_table *table,
+					  unsigned long hash);
 
 #endif

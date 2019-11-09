@@ -1,6 +1,5 @@
 /* format of ISAKMP message header
  * Copyright (C) 2014 D. Hugh Redelmeier <hugh@mimosa.com>
- * Copyright (C) 2019 Andrew Cagney <cagney@gnu.org>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -48,9 +47,8 @@
 #define NSIZEOF_isakmp_generic	4	/* on-the-wire sizeof isakmp_generic) */
 
 struct isakmp_hdr {
-#define isa_ike_initiator_spi isa_ike_spis.initiator
-#define isa_ike_responder_spi isa_ike_spis.responder
-	ike_spis_t isa_ike_spis;
+	ike_spi_t isa_ike_initiator_spi;
+	ike_spi_t isa_ike_responder_spi;
 	uint8_t isa_np;	/* Next payload */
 	uint8_t isa_version;	/* high-order 4 bits: Major; low order 4: Minor */
 	uint8_t isa_xchg;	/* Exchange type */

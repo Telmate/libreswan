@@ -5,7 +5,6 @@
  * Copyright (C) 2007-2008 Antony Antony <antony@xelerance.com>
  * Copyright (C) 2007-2008 Paul Wouters <paul@xelerance.com>
  * Copyright (C) 2012 Paul Wouters <paul@libreswan.org>
- * Copyright (C) 2019 Andrew Cagney <cagney@gnu.org>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -21,13 +20,13 @@
 
 #include "rnd.h"
 #include <pk11pub.h>
-#include "defs.h"
+
 #include "lswnss.h"
 #include "lswlog.h"
 #include "ike_spi.h"		/* for refresh_ike_spi_secret() */
 #include "ikev2_cookie.h"	/* for refresh_v2_cookie_secret() */
 
-#include "server.h"
+#include "timer.h"
 
 /* A true random number generator (we hope)
  *
@@ -66,7 +65,7 @@
  *   exchange.  Eventually, one per informational exchange.
  */
 
-void get_rnd_bytes(void *buffer, size_t length)
+void get_rnd_bytes(u_char *buffer, int length)
 {
 	SECStatus rv = PK11_GenerateRandom(buffer, length);
 	if (rv != SECSuccess) {
@@ -82,7 +81,7 @@ void fill_rnd_chunk(chunk_t chunk)
 	get_rnd_bytes(chunk.ptr, chunk.len);
 }
 
-static void refresh_secrets(void)
+void init_secret(void)
 {
 	/*
 	 * Generate the secret value for responder cookies, and
@@ -90,11 +89,5 @@ static void refresh_secrets(void)
 	 */
 	refresh_ike_spi_secret();
 	refresh_v2_cookie_secret();
-}
-
-void init_secret(void)
-{
-	enable_periodic_timer(EVENT_REINIT_SECRET, refresh_secrets,
-			      deltatime(EVENT_REINIT_SECRET_DELAY));
-	refresh_secrets();
+	event_schedule_s(EVENT_REINIT_SECRET, EVENT_REINIT_SECRET_DELAY, NULL);
 }

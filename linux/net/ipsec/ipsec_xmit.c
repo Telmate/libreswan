@@ -425,7 +425,6 @@ DEBUG_NO_STATIC u_int8_t ipsec_adjust_mss(struct sk_buff *skb,
 }
 #endif  /* MSS_HACK_DELETE_ME_PLEASE */
 
-/* NOTE: may return a pointer to a static buffer */
 DEBUG_NO_STATIC const char *ipsec_xmit_err(int err)
 {
 	static char tmp[32];
@@ -1803,22 +1802,25 @@ enum ipsec_xmit_value ipsec_xmit_init1(struct ipsec_xmit_state *ixs)
 						nexthdr;
 
 					if (nexthdroff) {
-						if (nexthdr == IPPROTO_UDP) {
+						if (nexthdr == IPPROTO_UDP)
 							udphdr =
 								skb_header_pointer(
 									ixs->skb,
 									nexthdroff,
 									sizeof(*udphdr),
 									&_udphdr);
-						} else if (nexthdr ==
-							 IPPROTO_TCP) {
+
+
+						else if (nexthdr ==
+							 IPPROTO_TCP)
 							tcphdr =
 								skb_header_pointer(
 									ixs->skb,
 									nexthdroff,
 									sizeof(*tcphdr),
 									&_tcphdr);
-						}
+
+
 					}
 
 					if (ixs->eroute->er_eaddr.sen_sport6 !=
@@ -1890,6 +1892,7 @@ enum ipsec_xmit_value ipsec_xmit_init1(struct ipsec_xmit_state *ixs)
 						ixs->skb = NULL;
 					}
 					/* whether or not the above succeeded, we continue */
+
 				}
 				if (ixs->stats)
 					ixs->stats->tx_dropped++;
@@ -2001,6 +2004,7 @@ enum ipsec_xmit_value ipsec_xmit_init1(struct ipsec_xmit_state *ixs)
 						ixs->skb = NULL;
 					}
 					/* whether or not the above succeeded, we continue */
+
 				}
 				if (ixs->stats)
 					ixs->stats->tx_dropped++;
@@ -2658,6 +2662,7 @@ static inline int ipsec_xmit_send2_mast(struct sk_buff *skb)
 #else
 	return ipsec_xmit_send2(dev_net(skb->dev), skb->sk, skb);
 #endif
+
 }
 
 enum ipsec_xmit_value ipsec_nat_encap(struct ipsec_xmit_state *ixs)

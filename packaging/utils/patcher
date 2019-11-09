@@ -30,7 +30,7 @@ umask 022
 
 verbose=
 modifier=patch
-while [ $# != 0 ]
+for dummy
 do
 	case "$1" in
 	-v)	verbose=yes		;;
@@ -81,7 +81,7 @@ then
 		shift ; shift
 		need $patchfile
 
-		if grep -E -q "$key" $it
+		if egrep -q "$key" $it
 		then
 			# patched but no record of how
 			note "$it no longer needs patch $patchfile"
@@ -105,7 +105,7 @@ else
 		need $patchfile
 		md5sum $patchfile | awk '{print $1}' >>$tmp
 
-		if grep -E -q "$key" $it.preipsec
+		if egrep -q "$key" $it.preipsec
 		then
 			note "$it no longer needs patch $patchfile"
 		else

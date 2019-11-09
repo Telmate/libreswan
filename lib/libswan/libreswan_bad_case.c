@@ -20,8 +20,13 @@
 
 #include "lswlog.h"
 
-void libreswan_bad_case(const char *expression, long value, where_t where)
+void libreswan_bad_case(const char *expression, long value,
+			const char *func, const char *file, unsigned long line)
 {
-	lsw_passert_fail(where, "switch (%s) case %ld (0x%lx) unexpected",
-			 expression, value, value);
+	LSWLOG_PASSERT_SOURCE(func, file, line, buf) {
+		lswlogf(buf, "switch (%s) case %ld (0x%lx) unexpected",
+			expression, value, value);
+	}
+	/* above will panic but compiler doesn't know this */
+	abort();
 }

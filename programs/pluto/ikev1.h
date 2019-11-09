@@ -5,16 +5,12 @@
 #include "ikev1_continuations.h"
 #include "packet.h"		/* for pb_stream */
 #include "fd.h"
-#include "crypt_mac.h"
-
-struct child_proposals;
-struct ike_proposals;
 
 /* ikev1.c */
 
 extern void init_ikev1(void);
 
-const struct dh_desc *ikev1_quick_pfs(const struct child_proposals proposals);
+const struct oakley_group_desc *ikev1_quick_pfs(struct alg_info_esp *aie);
 
 void ikev1_init_out_pbs_echo_hdr(struct msg_digest *md, bool enc, uint8_t np,
 				 pb_stream *output_stream, uint8_t *output_buffer,
@@ -62,18 +58,22 @@ extern void main_outI1(fd_t whack_sock,
 		       struct connection *c,
 		       struct state *predecessor,
 		       lset_t policy,
-		       unsigned long try,
-		       const threadtime_t *inception,
-		       struct xfrm_user_sec_ctx_ike *uctx);
+		       unsigned long try
+#ifdef HAVE_LABELED_IPSEC
+		       , struct xfrm_user_sec_ctx_ike *uctx
+#endif
+		       );
 
 /* extern initiator_function aggr_outI1; */
 extern void aggr_outI1(fd_t whack_sock,
 		       struct connection *c,
 		       struct state *predecessor,
 		       lset_t policy,
-		       unsigned long try,
-		       const threadtime_t *inception,
-		       struct xfrm_user_sec_ctx_ike *uctx);
+		       unsigned long try
+#ifdef HAVE_LABELED_IPSEC
+		       , struct xfrm_user_sec_ctx_ike *uctx
+#endif
+		       );
 
 extern void send_v1_delete(struct state *st);
 
@@ -85,12 +85,16 @@ extern void send_v1_delete(struct state *st);
 extern bool ikev1_decode_peer_id(struct msg_digest *md, bool initiator,
 			   bool aggrmode);
 
-extern size_t v1_sign_hash_RSA(const struct connection *c,
-			       uint8_t *sig_val, size_t sig_size,
-			       const struct crypt_mac *hash);
+extern size_t RSA_sign_hash(const struct connection *c,
+			    u_char sig_val[RSA_MAX_OCTETS],
+			    const u_char *hash_val, size_t hash_len,
+			    enum notify_payload_hash_algorithms hash_algo);
 
-struct crypt_mac main_mode_hash(struct state *st, enum sa_role role,
-				const pb_stream *idpl);  /* ID payload, as PBS; cur must be at end */
+extern size_t                           /* length of hash */
+main_mode_hash(struct state *st,
+	       u_char *hash_val,        /* resulting bytes */
+	       bool hashi,              /* Initiator? */
+	       const pb_stream *idpl);  /* ID payload, as PBS; cur must be at end */
 
 /*
  * Note: oakley_id_and_auth may switch the connection being used!

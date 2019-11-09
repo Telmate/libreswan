@@ -13,6 +13,7 @@
  * for more details.
  */
 
+#include <libreswan.h>
 #include <prerror.h>
 #include <secport.h>
 #include "nss_err.h"

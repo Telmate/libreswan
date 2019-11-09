@@ -24,7 +24,7 @@ PING 192.0.2.254 (192.0.2.254) from 192.0.1.254 : 56(84) bytes of data.
 1 packets transmitted, 0 received, 100% packet loss, time XXXX
 west #
  ipsec start
-Redirecting to: [initsystem]
+Redirecting to: systemctl start ipsec.service
 west #
  /testing/pluto/bin/wait-until-pluto-started
 west #
@@ -33,16 +33,14 @@ west #
 west #
  ipsec whack --impair suppress-retransmits
 west #
- ipsec whack --impair revival
-west #
  echo "initdone"
 initdone
 west #
  ipsec auto --up west-east-delete1
 002 "west-east-delete1" #1: initiating v2 parent SA
-1v2 "west-east-delete1" #1: initiate
-1v2 "west-east-delete1" #1: STATE_PARENT_I1: sent v2I1, expected v2R1
-1v2 "west-east-delete1" #2: STATE_PARENT_I2: sent v2I2, expected v2R2 {auth=IKEv2 cipher=AES_GCM_16_256 integ=n/a prf=HMAC_SHA2_512 group=MODP2048}
+133 "west-east-delete1" #1: initiate
+133 "west-east-delete1" #1: STATE_PARENT_I1: sent v2I1, expected v2R1
+134 "west-east-delete1" #2: STATE_PARENT_I2: sent v2I2, expected v2R2 {auth=IKEv2 cipher=AES_GCM_16_256 integ=n/a prf=HMAC_SHA2_512 group=MODP2048}
 002 "west-east-delete1" #2: IKEv2 mode peer ID is ID_FQDN: '@east'
 003 "west-east-delete1" #2: Authenticated using authby=secret
 002 "west-east-delete1" #2: negotiated connection [192.0.1.0-192.0.1.255:0-65535 0] -> [192.0.2.0-192.0.2.255:0-65535 0]
@@ -61,12 +59,14 @@ west #
 west #
  ipsec auto --status
 000 using kernel interface: netkey
-000 interface lo/lo 127.0.0.1:4500
-000 interface lo/lo 127.0.0.1:500
-000 interface eth0/eth0 192.0.1.254:4500
-000 interface eth0/eth0 192.0.1.254:500
-000 interface eth1/eth1 192.1.2.45:4500
-000 interface eth1/eth1 192.1.2.45:500
+000 interface lo/lo 127.0.0.1@4500
+000 interface lo/lo 127.0.0.1@500
+000 interface eth0/eth0 192.0.1.254@4500
+000 interface eth0/eth0 192.0.1.254@500
+000 interface eth1/eth1 192.1.2.45@4500
+000 interface eth1/eth1 192.1.2.45@500
+000 interface eth2/eth2 192.9.4.45@4500
+000 interface eth2/eth2 192.9.4.45@500
 000  
 000  
 000 fips mode=disabled;
@@ -79,7 +79,7 @@ west #
 000 nssdir=/etc/ipsec.d, dumpdir=/run/pluto, statsbin=unset
 000 dnssec-rootkey-file=/var/lib/unbound/root.key, dnssec-trusted=<unset>
 000 sbindir=PATH/sbin, libexecdir=PATH/libexec/ipsec
-000 nhelpers=-1, uniqueids=yes, dnssec-enable=yes, perpeerlog=no, logappend=no, logip=yes, shuntlifetime=900s, xfrmlifetime=30s
+000 nhelpers=-1, uniqueids=yes, dnssec-enable=yes, perpeerlog=no, logappend=no, logip=yes, shuntlifetime=900s, xfrmlifetime=300s
 000 ddos-cookies-threshold=50000, ddos-max-halfopen=25000, ddos-mode=auto
 000 ikeport=500, ikebuf=0, msg_errqueue=yes, strictcrlpolicy=no, crlcheckinterval=0, listen=<any>, nflog-all=0
 000 ocsp-enable=no, ocsp-strict=no, ocsp-timeout=2, ocsp-uri=<unset>
@@ -138,6 +138,7 @@ west #
 000 algorithm IKE PRF: name=HMAC_SHA2_384, hashlen=48
 000 algorithm IKE PRF: name=HMAC_SHA2_512, hashlen=64
 000 algorithm IKE PRF: name=AES_XCBC, hashlen=16
+000 algorithm IKE DH Key Exchange: name=MODP1024, bits=1024
 000 algorithm IKE DH Key Exchange: name=MODP1536, bits=1536
 000 algorithm IKE DH Key Exchange: name=MODP2048, bits=2048
 000 algorithm IKE DH Key Exchange: name=MODP3072, bits=3072
@@ -158,6 +159,7 @@ west #
 000 "west-east-delete1":   xauth us:none, xauth them:none,  my_username=[any]; their_username=[any]
 000 "west-east-delete1":   our auth:secret, their auth:secret
 000 "west-east-delete1":   modecfg info: us:none, them:none, modecfg policy:push, dns:unset, domains:unset, banner:unset, cat:unset;
+000 "west-east-delete1":   labeled_ipsec:no;
 000 "west-east-delete1":   policy_label:unset;
 000 "west-east-delete1":   ike_life: 3600s; ipsec_life: 28800s; replay_window: 32; rekey_margin: 540s; rekey_fuzz: 100%; keyingtries: 0;
 000 "west-east-delete1":   retransmit-interval: 9999ms; retransmit-timeout: 99s;
@@ -177,8 +179,8 @@ west #
 000 IKE SAs: total(1), half-open(0), open(0), authenticated(1), anonymous(0)
 000 IPsec SAs: total(1), authenticated(1), anonymous(0)
 000  
-000 #1: "west-east-delete1":500 STATE_PARENT_I3 (PARENT SA established); EVENT_SA_REKEY in XXs; newest ISAKMP; idle;
-000 #2: "west-east-delete1":500 STATE_V2_IPSEC_I (IPsec SA established); EVENT_SA_REKEY in XXs; newest IPSEC; eroute owner; isakmp#1; idle;
+000 #1: "west-east-delete1":500 STATE_PARENT_I3 (PARENT SA established); EVENT_SA_REPLACE in XXs; newest ISAKMP; idle;
+000 #2: "west-east-delete1":500 STATE_V2_IPSEC_I (IPsec SA established); EVENT_SA_REPLACE in XXs; newest IPSEC; eroute owner; isakmp#1; idle;
 000 #2: "west-east-delete1" esp.ESPSPIi@192.1.2.23 esp.ESPSPIi@192.1.2.45 tun.0@192.1.2.23 tun.0@192.1.2.45 ref=0 refhim=0 Traffic: ESPin=168B ESPout=168B! ESPmax=0B 
 000  
 000 Bare Shunt list:
@@ -200,12 +202,14 @@ west #
 west #
  ipsec auto --status
 000 using kernel interface: netkey
-000 interface lo/lo 127.0.0.1:4500
-000 interface lo/lo 127.0.0.1:500
-000 interface eth0/eth0 192.0.1.254:4500
-000 interface eth0/eth0 192.0.1.254:500
-000 interface eth1/eth1 192.1.2.45:4500
-000 interface eth1/eth1 192.1.2.45:500
+000 interface lo/lo 127.0.0.1@4500
+000 interface lo/lo 127.0.0.1@500
+000 interface eth0/eth0 192.0.1.254@4500
+000 interface eth0/eth0 192.0.1.254@500
+000 interface eth1/eth1 192.1.2.45@4500
+000 interface eth1/eth1 192.1.2.45@500
+000 interface eth2/eth2 192.9.4.45@4500
+000 interface eth2/eth2 192.9.4.45@500
 000  
 000  
 000 fips mode=disabled;
@@ -218,7 +222,7 @@ west #
 000 nssdir=/etc/ipsec.d, dumpdir=/run/pluto, statsbin=unset
 000 dnssec-rootkey-file=/var/lib/unbound/root.key, dnssec-trusted=<unset>
 000 sbindir=PATH/sbin, libexecdir=PATH/libexec/ipsec
-000 nhelpers=-1, uniqueids=yes, dnssec-enable=yes, perpeerlog=no, logappend=no, logip=yes, shuntlifetime=900s, xfrmlifetime=30s
+000 nhelpers=-1, uniqueids=yes, dnssec-enable=yes, perpeerlog=no, logappend=no, logip=yes, shuntlifetime=900s, xfrmlifetime=300s
 000 ddos-cookies-threshold=50000, ddos-max-halfopen=25000, ddos-mode=auto
 000 ikeport=500, ikebuf=0, msg_errqueue=yes, strictcrlpolicy=no, crlcheckinterval=0, listen=<any>, nflog-all=0
 000 ocsp-enable=no, ocsp-strict=no, ocsp-timeout=2, ocsp-uri=<unset>
@@ -277,6 +281,7 @@ west #
 000 algorithm IKE PRF: name=HMAC_SHA2_384, hashlen=48
 000 algorithm IKE PRF: name=HMAC_SHA2_512, hashlen=64
 000 algorithm IKE PRF: name=AES_XCBC, hashlen=16
+000 algorithm IKE DH Key Exchange: name=MODP1024, bits=1024
 000 algorithm IKE DH Key Exchange: name=MODP1536, bits=1536
 000 algorithm IKE DH Key Exchange: name=MODP2048, bits=2048
 000 algorithm IKE DH Key Exchange: name=MODP3072, bits=3072
@@ -297,6 +302,7 @@ west #
 000 "west-east-delete1":   xauth us:none, xauth them:none,  my_username=[any]; their_username=[any]
 000 "west-east-delete1":   our auth:secret, their auth:secret
 000 "west-east-delete1":   modecfg info: us:none, them:none, modecfg policy:push, dns:unset, domains:unset, banner:unset, cat:unset;
+000 "west-east-delete1":   labeled_ipsec:no;
 000 "west-east-delete1":   policy_label:unset;
 000 "west-east-delete1":   ike_life: 3600s; ipsec_life: 28800s; replay_window: 32; rekey_margin: 540s; rekey_fuzz: 100%; keyingtries: 0;
 000 "west-east-delete1":   retransmit-interval: 9999ms; retransmit-timeout: 99s;
@@ -315,7 +321,7 @@ west #
 000 IKE SAs: total(1), half-open(0), open(0), authenticated(1), anonymous(0)
 000 IPsec SAs: total(0), authenticated(0), anonymous(0)
 000  
-000 #1: "west-east-delete1":500 STATE_PARENT_I3 (PARENT SA established); EVENT_SA_REKEY in XXs; newest ISAKMP; idle;
+000 #1: "west-east-delete1":500 STATE_PARENT_I3 (PARENT SA established); EVENT_SA_REPLACE in XXs; newest ISAKMP; idle;
 000  
 000 Bare Shunt list:
 000  
@@ -325,18 +331,19 @@ sleeping a bit.. 2
 west #
  ipsec whack --deletestate 1
 002 "west-east-delete1" #1: deleting state (STATE_PARENT_I3) and sending notification
-002 "west-east-delete1" #1: IMPAIR: skipping revival of connection 'west-east-delete1' that is supposed to remain up
 west #
  sleep 2
 west #
  ipsec auto --status
 000 using kernel interface: netkey
-000 interface lo/lo 127.0.0.1:4500
-000 interface lo/lo 127.0.0.1:500
-000 interface eth0/eth0 192.0.1.254:4500
-000 interface eth0/eth0 192.0.1.254:500
-000 interface eth1/eth1 192.1.2.45:4500
-000 interface eth1/eth1 192.1.2.45:500
+000 interface lo/lo 127.0.0.1@4500
+000 interface lo/lo 127.0.0.1@500
+000 interface eth0/eth0 192.0.1.254@4500
+000 interface eth0/eth0 192.0.1.254@500
+000 interface eth1/eth1 192.1.2.45@4500
+000 interface eth1/eth1 192.1.2.45@500
+000 interface eth2/eth2 192.9.4.45@4500
+000 interface eth2/eth2 192.9.4.45@500
 000  
 000  
 000 fips mode=disabled;
@@ -349,7 +356,7 @@ west #
 000 nssdir=/etc/ipsec.d, dumpdir=/run/pluto, statsbin=unset
 000 dnssec-rootkey-file=/var/lib/unbound/root.key, dnssec-trusted=<unset>
 000 sbindir=PATH/sbin, libexecdir=PATH/libexec/ipsec
-000 nhelpers=-1, uniqueids=yes, dnssec-enable=yes, perpeerlog=no, logappend=no, logip=yes, shuntlifetime=900s, xfrmlifetime=30s
+000 nhelpers=-1, uniqueids=yes, dnssec-enable=yes, perpeerlog=no, logappend=no, logip=yes, shuntlifetime=900s, xfrmlifetime=300s
 000 ddos-cookies-threshold=50000, ddos-max-halfopen=25000, ddos-mode=auto
 000 ikeport=500, ikebuf=0, msg_errqueue=yes, strictcrlpolicy=no, crlcheckinterval=0, listen=<any>, nflog-all=0
 000 ocsp-enable=no, ocsp-strict=no, ocsp-timeout=2, ocsp-uri=<unset>
@@ -408,6 +415,7 @@ west #
 000 algorithm IKE PRF: name=HMAC_SHA2_384, hashlen=48
 000 algorithm IKE PRF: name=HMAC_SHA2_512, hashlen=64
 000 algorithm IKE PRF: name=AES_XCBC, hashlen=16
+000 algorithm IKE DH Key Exchange: name=MODP1024, bits=1024
 000 algorithm IKE DH Key Exchange: name=MODP1536, bits=1536
 000 algorithm IKE DH Key Exchange: name=MODP2048, bits=2048
 000 algorithm IKE DH Key Exchange: name=MODP3072, bits=3072
@@ -428,6 +436,7 @@ west #
 000 "west-east-delete1":   xauth us:none, xauth them:none,  my_username=[any]; their_username=[any]
 000 "west-east-delete1":   our auth:secret, their auth:secret
 000 "west-east-delete1":   modecfg info: us:none, them:none, modecfg policy:push, dns:unset, domains:unset, banner:unset, cat:unset;
+000 "west-east-delete1":   labeled_ipsec:no;
 000 "west-east-delete1":   policy_label:unset;
 000 "west-east-delete1":   ike_life: 3600s; ipsec_life: 28800s; replay_window: 32; rekey_margin: 540s; rekey_fuzz: 100%; keyingtries: 0;
 000 "west-east-delete1":   retransmit-interval: 9999ms; retransmit-timeout: 99s;
@@ -467,6 +476,7 @@ default via 192.1.2.254 dev eth1
 192.0.1.0/24 dev eth0 proto kernel scope link src 192.0.1.254
 192.0.2.0/24 via 192.1.2.23 dev eth1
 192.1.2.0/24 dev eth1 proto kernel scope link src 192.1.2.45
+192.9.4.0/24 dev eth2 proto kernel scope link src 192.9.4.45
 NSS_CERTIFICATES
 Certificate Nickname                                         Trust Attributes
                                                              SSL,S/MIME,JAR/XPI

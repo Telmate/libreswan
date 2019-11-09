@@ -31,6 +31,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 
+#include <libreswan.h>
 
 #include "rnd.h"
 #include "defs.h"
@@ -72,7 +73,7 @@ bool unique_msgid(const struct state *st, msgid_t msgid)
 	struct msgid_list *p;
 
 	passert(msgid != v1_MAINMODE_MSGID);
-	passert(IS_ISAKMP_ENCRYPTED(st->st_state->kind));
+	passert(IS_ISAKMP_ENCRYPTED(st->st_state));
 
 	for (p = st->st_used_msgids; p != NULL; p = p->next)
 		if (p->msgid == msgid)
@@ -85,7 +86,7 @@ void reserve_msgid(struct state *st, msgid_t msgid)
 {
 	struct msgid_list *p;
 
-	passert(IS_PHASE1(st->st_state->kind) || IS_PHASE15(st->st_state->kind));
+	passert(IS_PHASE1(st->st_state) || IS_PHASE15(st->st_state));
 	p = alloc_thing(struct msgid_list, "msgid");
 	p->msgid = msgid;
 	p->next = st->st_used_msgids;
@@ -97,7 +98,7 @@ msgid_t generate_msgid(const struct state *st)
 	int timeout = 100; /* only try so hard for unique msgid */
 	msgid_t msgid;
 
-	passert(IS_ISAKMP_ENCRYPTED(st->st_state->kind));
+	passert(IS_ISAKMP_ENCRYPTED(st->st_state));
 
 	for (;; ) {
 		get_rnd_bytes((void *) &msgid, sizeof(msgid));
@@ -118,7 +119,7 @@ void ikev1_clear_msgid_list(const struct state *st)
 {
 	struct msgid_list *p = st->st_used_msgids;
 
-	passert(st->st_state->kind == STATE_UNDEFINED);
+	passert(st->st_state == STATE_UNDEFINED);
 	while (p != NULL) {
 		struct msgid_list *q = p;
 

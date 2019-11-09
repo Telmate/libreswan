@@ -2,7 +2,6 @@
  * IKEv2 Redirect Mechanism (RFC 5685) related functions
  *
  * Copyright (C) 2018 Vukasin Karadzic <vukasin.karadzic@gmail.com>
- * Copyright (C) 2019 D. Hugh Redelmeier <hugh@mimosa.com>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -20,55 +19,65 @@
 
 #include "packet.h"
 
-enum allow_global_redirect global_redirect;
+int global_redirect;
 char *global_redirect_to;
 
 /*
- * Emit IKEv2 Notify Redirect payload.
+ * Build Notify data for IKEv2 Notify Redirect notification.
+ * We don't use out_struct, because we pass chunk_t to
+ * ship_v2N method, and not a pb_stream. Luckily, only
+ * two bytes (GW Ident Type, GW Ident Len) are static
+ * fields in Notify Data of REDIRECT payload.
  *
  * @param destination string of IPv4/IPv6/FQDN address.
- * @param optional nonce data containing nonce
- * @param pbs output stream
+ * @param global_red bool that indicates whether payload
+ * 	  will be sent in IKE_SA_INIT
+ * @param nonce data containing nonce, only being sent if
+ * 	  global_red is true
+ * @param data Notify data we built.
+ * @return err_t NULL if everything went right,
+ * 		 otherwise (not-NULL) what went wrong
  */
-extern bool emit_redirect_notification(
-		const char *destination,
-		const chunk_t *nonce, /* optional */
-		pb_stream *pbs);
+extern err_t build_redirect_notify_data(char *destination,
+					bool global_red,
+					chunk_t *nonce,
+					chunk_t *data);
 
-/*
- * Emit IKEv2 Notify Redirect payload given an already decoded destination.
- *
- * @param ntype type of notification (v2N_REDIRECT or v2N_REDIRECTED_FROM)
- * @param dest_ip IPv4/IPv6 address of destination.
- * @param dest_str string of FQDN address of destination.
- * @param optional nonce data containing nonce
- * @param pbs output stream
- */
-extern bool emit_redirect_notification_decoded_dest(
-		v2_notification_t ntype,
-		const ip_address *dest_ip,
-		const char *dest_str,
-		const chunk_t *nonce, /* optional */
-		pb_stream *pbs);
 /*
  * Extract needed information from IKEv2 Notify Redirect
  * notification.
  *
  * @param data that was transferred in v2_REDIRECT Notify
- * @param char* list of addresses we accept being redirected
+ * @param char* list of addresses we allow to be redirected
  * 	  to, specified with conn option accept-redirect-to
+ * @param global_red bool that indicates whether
+ * 	  payload was sent in IKE_SA_INIT response
  * @param nonce that was send in IKE_SA_INIT request,
  * 	  we need to compare it with nonce data sent
  * 	  in Notify data. We do all that only if
- * 	  nonce isn't NULL.
+ * 	  global_red is true
  * @param redirect_ip ip address we need to redirect to
  * @return err_t NULL if everything went right,
  * 		 otherwise (non-NULL)  what went wrong
  */
 extern err_t parse_redirect_payload(pb_stream *input,
-				    const char *allowed_targets_list,
-				    const chunk_t *nonce,
-				    ip_address *redirect_ip /* result */);
+				    char *allowed_targets_list,
+				    bool in_ike_sa_init,
+				    chunk_t *nonce,
+				    ip_address *redirect_ip);
+
+/*
+ * Build Notify data for IKEv2 Notify REDIRECTED_FROM payload.
+ *
+ * REDIRECTED_FROM has the same structure as REDIRECT payload,
+ * except there is no nonce sending in any case, and GW_FQDN
+ * is not valid as GW_Ident_Type.
+ *
+ * @param old_gw_address ip_address of the gateway that sent us here
+ * @param data Notify data we built
+ */
+extern err_t build_redirected_from_notify_data(ip_address old_gw_address,
+					   chunk_t *data);
 
 /*
  * Initiate via initiate_connection new IKE_SA_INIT exchange

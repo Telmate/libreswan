@@ -3,9 +3,9 @@
  * Originally by: JuanJo Ciarlante <jjo-ipsec@mendoza.gov.ar>
  * Reworked into openswan 2.x by Michael Richardson <mcr@xelerance.com>
  *
- * Copyright (C) 2012-2019 Paul Wouters <pwouters@redhat.com>
- * Copyright (C) 2012-2013 Paul Wouters <paul@libreswan.org>
- * Copyright (C) 2012-2013 D. Hugh Redelmeier
+ * (C)opyright 2012 Paul Wouters <pwouters@redhat.com>
+ * (C)opyright 2012-2013 Paul Wouters <paul@libreswan.org>
+ * (C)opyright 2012-2013 D. Hugh Redelmeier
  * Copyright (C) 2015-2017 Andrew Cagney <cagney@gnu.com>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -21,6 +21,7 @@
 
 #include <sys/types.h>
 #include <stdlib.h>
+#include <libreswan.h>
 #include <libreswan/pfkeyv2.h>
 #include <libreswan/passert.h>
 
@@ -33,6 +34,7 @@
 #include "connections.h"
 #include "state.h"
 #include "kernel_alg.h"
+#include "alg_info.h"
 #include "ike_alg.h"
 #include "ike_alg_integ.h"
 #include "ike_alg_encrypt.h"
@@ -45,16 +47,15 @@
 #include "ikev1.h"	/* for ikev1_quick_dh() */
 
 static bool kernel_alg_db_add(struct db_context *db_ctx,
-			      const struct proposal *proposal,
+			      const struct proposal_info *esp_info,
 			      lset_t policy, bool logit)
 {
 	int ealg_i = SADB_EALG_NONE;
 
-	struct v1_proposal algs = v1_proposal(proposal);
 	if (policy & POLICY_ENCRYPT) {
-		ealg_i = algs.encrypt->common.id[IKEv1_ESP_ID];
+		ealg_i = esp_info->encrypt->common.id[IKEv1_ESP_ID];
 		/* already checked by the parser? */
-		if (!kernel_alg_encrypt_ok(algs.encrypt)) {
+		if (!kernel_alg_encrypt_ok(esp_info->encrypt)) {
 			if (logit) {
 				loglog(RC_LOG_SERIOUS,
 				       "requested kernel enc ealg_id=%d not present",
@@ -67,10 +68,10 @@ static bool kernel_alg_db_add(struct db_context *db_ctx,
 		}
 	}
 
-	int aalg_i = algs.integ->integ_ikev1_ah_transform;
+	int aalg_i = esp_info->integ->integ_ikev1_ah_transform;
 
 	/* already checked by the parser? */
-	if (!kernel_alg_integ_ok(algs.integ)) {
+	if (!kernel_alg_integ_ok(esp_info->integ)) {
 		DBG_log("kernel_alg_db_add() kernel auth aalg_id=%d not present",
 			aalg_i);
 		return FALSE;
@@ -81,36 +82,36 @@ static bool kernel_alg_db_add(struct db_context *db_ctx,
 		db_trans_add(db_ctx, ealg_i);
 
 		/* add ESP auth attr (if present) */
-		if (algs.integ != &ike_alg_integ_none) {
+		if (esp_info->integ != &ike_alg_integ_none) {
 			db_attr_add_values(db_ctx,
 					   AUTH_ALGORITHM,
-					   algs.integ->common.id[IKEv1_ESP_ID]);
+					   esp_info->integ->common.id[IKEv1_ESP_ID]);
 		}
 
 		/* add keylength if specified in esp= string */
-		if (algs.enckeylen != 0) {
-			db_attr_add_values(db_ctx,
-					   KEY_LENGTH,
-					   algs.enckeylen);
+		if (esp_info->enckeylen != 0) {
+				db_attr_add_values(db_ctx,
+						   KEY_LENGTH,
+						   esp_info->enckeylen);
 		} else {
 			/* no key length - if required add default here and add another max entry */
-			int def_ks = (algs.encrypt->keylen_omitted ? 0
-				      : algs.encrypt->keydeflen);
+			int def_ks = (esp_info->encrypt->keylen_omitted ? 0
+				      : esp_info->encrypt->keydeflen);
 
 			if (def_ks != 0) {
 				db_attr_add_values(db_ctx, KEY_LENGTH, def_ks);
 				/* add this trans again with max key size */
-				int max_ks = encrypt_max_key_bit_length(algs.encrypt);
+				int max_ks = encrypt_max_key_bit_length(esp_info->encrypt);
 				if (def_ks != max_ks) {
 					db_trans_add(db_ctx, ealg_i);
-					if (algs.integ != &ike_alg_integ_none) {
+					if (esp_info->integ != &ike_alg_integ_none) {
 						db_attr_add_values(db_ctx,
 							AUTH_ALGORITHM,
-							algs.integ->common.id[IKEv1_ESP_ID]);
+							esp_info->integ->common.id[IKEv1_ESP_ID]);
 					}
 					db_attr_add_values(db_ctx,
-							   KEY_LENGTH,
-							   max_ks);
+						KEY_LENGTH,
+						max_ks);
 				}
 			}
 		}
@@ -119,8 +120,8 @@ static bool kernel_alg_db_add(struct db_context *db_ctx,
 		db_trans_add(db_ctx, aalg_i);
 
 		/* add ESP auth attr */
-		db_attr_add_values(db_ctx, AUTH_ALGORITHM,
-				   algs.integ->common.id[IKEv1_ESP_ID]);
+		db_attr_add_values(db_ctx,
+				   AUTH_ALGORITHM, esp_info->integ->common.id[IKEv1_ESP_ID]);
 	}
 
 	return TRUE;
@@ -134,7 +135,7 @@ static bool kernel_alg_db_add(struct db_context *db_ctx,
  *	for now this function does free() previous returned
  *	malloced pointer (this quirk allows easier spdb.c change)
  */
-static struct db_context *kernel_alg_db_new(struct child_proposals proposals,
+static struct db_context *kernel_alg_db_new(struct alg_info_esp *alg_info,
 					    lset_t policy, bool logit)
 {
 	unsigned int trans_cnt = 0;
@@ -156,24 +157,25 @@ static struct db_context *kernel_alg_db_new(struct child_proposals proposals,
 
 	/*
 	 *      Loop: for each element (struct esp_info) of
-	 *      proposals, if kernel support is present then
+	 *      alg_info, if kernel support is present then
 	 *      build the transform (and attrs)
 	 *
-	 *      if NULL proposals, propose everything ...
+	 *      if NULL alg_info, propose everything ...
 	 */
 
 	bool success = TRUE;
-	if (proposals.p != NULL) {
-		FOR_EACH_PROPOSAL(proposals.p, proposal) {
+	if (alg_info != NULL) {
+		FOR_EACH_ESP_INFO(alg_info, proposal) {
 			LSWDBGP(DBG_CONTROL | DBG_EMITTING, buf) {
 				lswlogs(buf, "adding proposal: ");
-				fmt_proposal(buf, proposal);
+				lswlog_proposal_info(buf, proposal);
 			}
-			if (!kernel_alg_db_add(ctx_new, proposal, policy, logit))
+			if (!kernel_alg_db_add(ctx_new, proposal,
+					       policy, logit))
 				success = FALSE;	/* ??? should we break? */
 		}
 	} else {
-		PEXPECT_LOG("%s", "proposals should be non-NULL");
+		PEXPECT_LOG("%s", "alg_info should be non-NULL");
 	}
 
 	if (!success) {
@@ -266,7 +268,7 @@ void kernel_alg_show_connection(const struct connection *c, const char *instance
 		 * If this is NULL and PFS is required then callers fall back to using
 		 * the parent's DH algorithm.
 		 */
-		const struct dh_desc *dh = ikev1_quick_pfs(c->child_proposals);
+		const struct oakley_group_desc *dh = ikev1_quick_pfs(c->alg_info_esp);
 		if (dh != NULL) {
 			pfsbuf = dh->common.fqn;
 		} else {
@@ -276,13 +278,7 @@ void kernel_alg_show_connection(const struct connection *c, const char *instance
 		pfsbuf = "<N/A>";
 	}
 
-	/*
-	 * XXX: don't show the default proposal suite (assuming it is
-	 * known).  Mainly so that test output doesn't get churned
-	 * (originally it wasn't shown because it wasn't known).
-	 */
-	if (c->child_proposals.p != NULL &&
-	    !default_proposals(c->child_proposals.p)) {
+	if (c->alg_info_esp != NULL) {
 		LSWLOG_WHACK(RC_COMMENT, buf) {
 			/*
 			 * If DH (PFS) was specified in the esp= or
@@ -303,7 +299,7 @@ void kernel_alg_show_connection(const struct connection *c, const char *instance
 			 */
 			lswlogf(buf, "\"%s\"%s:   %s algorithms: ",
 				c->name, instance, satype);
-			fmt_proposals(buf, c->child_proposals.p);
+			lswlog_alg_info(buf, &c->alg_info_esp->ai);
 		}
 	}
 
@@ -330,11 +326,10 @@ void kernel_alg_show_connection(const struct connection *c, const char *instance
 	}
 }
 
-struct db_sa *kernel_alg_makedb(lset_t policy,
-				struct child_proposals proposals,
+struct db_sa *kernel_alg_makedb(lset_t policy, struct alg_info_esp *ei,
 				bool logit)
 {
-	if (proposals.p == NULL) {
+	if (ei == NULL) {
 		struct db_sa *sadb;
 		lset_t pm = policy & (POLICY_ENCRYPT | POLICY_AUTHENTICATE);
 
@@ -349,7 +344,7 @@ struct db_sa *kernel_alg_makedb(lset_t policy,
 		return sadb;
 	}
 
-	struct db_context *dbnew = kernel_alg_db_new(proposals, policy, logit);
+	struct db_context *dbnew = kernel_alg_db_new(ei, policy, logit);
 
 	if (dbnew == NULL) {
 		libreswan_log("failed to translate esp_info to proposal, returning empty");

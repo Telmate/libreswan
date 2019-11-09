@@ -14,13 +14,19 @@
  * License for more details.
  */
 
-#include <string.h>
-#include <stdio.h>
-
 #include "ip_said.h"
-#include "ip_info.h"
-#include "jambuf.h"
-#include "libreswan/passert.h"
+
+static struct typename {
+	char type;
+	char *name;
+} typenames[] = {
+	{ SA_AH,        "ah" },
+	{ SA_ESP,       "esp" },
+	{ SA_IPIP,      "tun" },
+	{ SA_COMP,      "comp" },
+	{ SA_INT,       "int" },
+	{ 0,            NULL }
+};
 
 /*
    - satot - convert SA to text "ah507@1.2.3.4"
@@ -35,8 +41,11 @@ size_t dstlen;
 	size_t len = 0;         /* 0 means "not recognized yet" */
 	int base;
 	int showversion;        /* use delimiter to show IP version? */
+	struct typename *tn;
 	char *p;
+	char *pre;
 	char buf[10 + 1 + ULTOT_BUF + ADDRTOT_BUF];
+	char unk[10];
 
 	switch (format) {
 	case 0:
@@ -67,14 +76,23 @@ size_t dstlen;
 
 	memset(buf, 0, sizeof(buf));
 
-	/* const ip_protocol *proto = sa->proto; */
-	const struct ip_protocol *proto = sa->proto;
-	const char *pre = (proto == NULL ? "unk" : proto->prefix);
+	pre = NULL;
+	for (tn = typenames; tn->name != NULL; tn++)
+		if (sa->proto == tn->type) {
+			pre = tn->name;
+			break;          /* NOTE BREAK OUT */
+		}
+	if (pre == NULL) {              /* unknown protocol */
+		strcpy(unk, "unk");
+		(void) ultot((unsigned char)sa->proto, 10, unk + strlen(unk),
+			     sizeof(unk) - strlen(unk));
+		pre = unk;
+	}
 
 	if (strcmp(pre, PASSTHROUGHTYPE) == 0 &&
 	    sa->spi == PASSTHROUGHSPI &&
-	    isanyaddr(&sa->dst)) {
-		strcpy(buf, (said_type(sa) == &ipv4_info) ?
+	    isunspecaddr(&sa->dst)) {
+		strcpy(buf, (addrtypeof(&sa->dst) == AF_INET) ?
 		       PASSTHROUGH4NAME :
 		       PASSTHROUGH6NAME);
 		len = strlen(buf);
@@ -119,21 +137,15 @@ size_t dstlen;
 		len = strlen(buf);
 		if (showversion) {
 			*(buf +
-			  len) = (said_type(sa) == &ipv4_info) ?
+			  len) = (addrtypeof(&sa->dst) == AF_INET) ?
 				'.' : ':';
 			len++;
 			*(buf + len) = '\0';
 		}
 		len += ultot(ntohl(sa->spi), base, buf + len, sizeof(buf) - len);
 		*(buf + len - 1) = '@';
-		/* jambuf's are always '\0' terminated */
-		jambuf_t b = array_as_jambuf(buf + len, sizeof(buf) - len);
-		jam_address(&b, &sa->dst);
-		/* "pos" is always '\0' */
-		const char *end = jambuf_cursor(&b);
-		passert(*end == '\0');
-		/* *tot() functions lengh includes the NULL */
-		len = end-buf+1;
+		len += addrtot(&sa->dst, 0, buf + len, sizeof(buf) - len);
+		*(buf + len) = '\0';
 	}
 
 	if (dst != NULL) {

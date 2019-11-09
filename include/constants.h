@@ -1,4 +1,4 @@
-/*
+/* manifest constants
  *
  * Copyright (C) 1997 Angelos D. Keromytis.
  * Copyright (C) 1998-2002,2013 D. Hugh Redelmeier <hugh@mimosa.com>
@@ -8,7 +8,6 @@
  * Copyright (C) 2009 Avesh Agarwal <avagarwa@redhat.com>
  * Copyright (C) 2012 Paul Wouters <paul@libreswan.org>
  * Copyright (C) 2013 Tuomo Soini <tis@foobar.fi>
- * Copyright (C) 2019 Andrew Cagney <cagney@gnu.org>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -26,19 +25,10 @@
 #define _CONSTANTS_H_
 
 #include <stddef.h> /* for size_t */
-#include <string.h>		/* for strcmp() */
 
 #include "shunk.h"
 
 struct lswlog;
-
-/* Some constants code likes to use. Useful? */
-
-enum {
-	secs_per_minute = 60,
-	secs_per_hour = 60 * secs_per_minute,
-	secs_per_day = 24 * secs_per_hour
-};
 
 /*
  * This file was split into internal contants (Libreswan/pluto related),
@@ -54,6 +44,9 @@ enum {
  * numbers back to names.
  * Any changes here should be reflected there.
  */
+
+#define elemsof(array) (sizeof(array) / sizeof(*(array)))	/* number of elements in an array */
+
 
 /*
  * min()/max() macros that also do
@@ -215,12 +208,8 @@ typedef const struct enum_names enum_names;
 extern const char *enum_name(enum_names *ed, unsigned long val);
 extern const char *enum_short_name(enum_names *ed, unsigned long val);
 
-/* old names */
 size_t lswlog_enum(struct lswlog *, enum_names *en, unsigned long val);
 size_t lswlog_enum_short(struct lswlog *, enum_names *en, unsigned long val);
-/* new names */
-#define jam_enum lswlog_enum
-#define jam_enum_short lswlog_enum
 
 /* caller-allocated buffer for enum_showb */
 struct esb_buf {
@@ -290,14 +279,10 @@ const char *enum_enum_name(enum_enum_names *e, unsigned long table,
 const char *enum_enum_showb(enum_enum_names *e, unsigned long table,
 			    unsigned long val, struct esb_buf *buf);
 
-/* old */
 size_t lswlog_enum_enum(struct lswlog *log, enum_enum_names *een,
 			unsigned long table, unsigned long val);
 size_t lswlog_enum_enum_short(struct lswlog *log, enum_enum_names *een,
 			      unsigned long table, unsigned long val);
-/* new */
-#define jam_enum_enum lswlog_enum_enum
-#define jam_enum_enum_short lswlog_enum_enum_short
 
 /*
  * The sparser_name should be transformed into keyword_enum_value

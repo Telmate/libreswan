@@ -1416,8 +1416,6 @@ int pfkey_msg_build(struct sadb_msg **pfkey_msg, struct sadb_ext *extensions[],
 	for (ext = 1; ext <= K_SADB_EXT_MAX; ext++) {
 		/* copy from extension[ext] to buffer */
 		if (extensions[ext]) {
-			size_t el;
-
 			/* Is this type of extension permitted for this type of message? */
 			if (!pfkey_permitted_extension(dir,
 						       (*pfkey_msg)->
@@ -1428,7 +1426,7 @@ int pfkey_msg_build(struct sadb_msg **pfkey_msg, struct sadb_ext *extensions[],
 				SENDERR(EINVAL);
 			}
 
-			el = extensions[ext]->sadb_ext_len * IPSEC_PFKEYv2_ALIGN;
+			size_t el = extensions[ext]->sadb_ext_len * IPSEC_PFKEYv2_ALIGN;
 
 			DEBUGGING(PF_KEY_DEBUG_BUILD,
 				  "pfkey_msg_build: "

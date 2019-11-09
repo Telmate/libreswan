@@ -8,8 +8,8 @@
  * Copyright (C) 2012-2013 Paul Wouters <paul@libreswan.org>
  * Copyright (C) 2013 D. Hugh Redelmeier <hugh@mimosa.com>
  * Copyright (C) 2015 Andrew Cagney
- * Copyright (C) 2015-2019 Paul Wouters <pwouters@redhat.com>
- * Copyright (C) 2017-2019 Andrew Cagney <cagney@gnu.org>
+ * Copyright (C) 2015 Paul Wouters <pwouters@redhat.com>
+ * Copyright (C) 2017 Andrew Cagney
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -29,6 +29,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#include <libreswan.h>
 #include "libreswan/pfkeyv2.h"
 
 #include "sysdep.h"
@@ -50,6 +51,7 @@
 
 #include "crypto.h"
 
+#include "alg_info.h"
 #include "kernel_alg.h"
 #include "ike_alg.h"
 #include "db_ops.h"

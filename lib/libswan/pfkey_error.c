@@ -18,6 +18,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include "libreswan.h"
 #include <libreswan/pfkeyv2.h>
 #include "pfkey_help.h"
 

@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <libreswan.h>
 
 #include "lswlog.h"
 #include "prmem.h"
@@ -26,7 +27,7 @@
 
 #include "constants.h"
 #include "ike_alg.h"
-#include "ike_alg_encrypt_ops.h"
+#include "ike_alg_encrypt_nss_cbc_ops.h"
 #include "lswnss.h"		/* for lswlog_nss_error() */
 
 static void ike_alg_nss_cbc(const struct encrypt_desc *alg,
@@ -116,7 +117,6 @@ static void nss_cbc_check(const struct encrypt_desc *encrypt)
 }
 
 const struct encrypt_ops ike_alg_encrypt_nss_cbc_ops = {
-	.backend = "NSS(CBC)",
 	.check = nss_cbc_check,
 	.do_crypt = ike_alg_nss_cbc,
 };

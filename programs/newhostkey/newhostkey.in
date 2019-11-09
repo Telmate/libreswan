@@ -29,7 +29,7 @@ seeddev="--seeddev /dev/random"
 output=
 nssdir="@IPSEC_NSSDIR@"
 password=
-while [ $# != 0 ] ; do
+for dummy; do
     case "$1" in
 	--bits)
 	    bits="${2}"

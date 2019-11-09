@@ -1,6 +1,6 @@
 /testing/guestbin/swan-prep 
 /usr/bin/pk12util -i /testing/x509/strongswan/strongEast.p12 -d sql:/etc/ipsec.d -w /testing/x509/nss-pw
-# Because we cannot run ipsec import, fixup trust bits manually
+# Tuomo: why doesn't ipsec checknss --settrust work here?
 certutil -M -d sql:/etc/ipsec.d -n "strongSwan CA - strongSwan" -t CT,,
 ipsec start
 /testing/pluto/bin/wait-until-pluto-started

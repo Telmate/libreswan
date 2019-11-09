@@ -1,29 +1,30 @@
 /testing/guestbin/swan-prep
 east #
  ipsec start
-Redirecting to: [initsystem]
+Redirecting to: systemctl start ipsec.service
 east #
  /testing/pluto/bin/wait-until-pluto-started
 east #
- # connections are loaded and initiated via auto=start
+ # connection is loaded and initiated via auto=start
 east #
- # waiting until we are within the last 50s of the IPsec SA lifetime
+ echo "initdone"
+initdone
 east #
- while (ipsec status |grep STATE_QUICK_I2 |grep "EVENT_SA_REPLACE in 5"); ret=$?; [ $ret -ne 0 ]; do sleep 1; done
-000 #2: "west-east-auto":500 STATE_QUICK_I2 (sent QI2, IPsec SA established); EVENT_SA_REPLACE in XXs; newest IPSEC; eroute owner; isakmp#1; idle;
+ # wait over one minute to ensure no EVENT_SA_REPLACE lingered and started something
 east #
- ipsec status |grep STATE_QUICK_I2 |grep "EVENT_SA_REPLACE in"
-000 #2: "west-east-auto":500 STATE_QUICK_I2 (sent QI2, IPsec SA established); EVENT_SA_REPLACE in XXs; newest IPSEC; eroute owner; isakmp#1; idle;
+ sleep 45
 east #
- # Connection should be up, and there should be NO log message about "already replacing"
+ sleep 30
 east #
- ipsec trafficstatus
-006 #2: "west-east-auto", type=ESP, add_time=1234567890, inBytes=0, outBytes=0, id='@west'
-006 #4: "west-east-auto", type=ESP, add_time=1234567890, inBytes=336, outBytes=336, id='@west'
+ # There should be no IKE SA and no IPsec SA
 east #
- grep "already replacing" /tmp/pluto.log && echo "bug triggered"
-"west-east-auto" #1: received Delete SA payload: already replacing IPsec State #2 in 54 seconds
-bug triggered
+ ipsec whack --trafficstatus
+east #
+ # east howvever, should be attempting to connect to west because it has auto=start
+east #
+ ipsec status |grep EVENT_RETRANSMIT | sed "s/EVENT_RETRANSMIT in .*$/EVENT_RETRANSMIT in .../"
+000 #5: "west-east-auto":500 STATE_MAIN_I1 (sent MI1, expecting MR1); EVENT_RETRANSMIT in ...
+east #
 east #
  ../bin/check-for-core.sh
 east #

@@ -1,7 +1,7 @@
 /testing/guestbin/swan-prep
 east #
  ipsec start
-Redirecting to: [initsystem]
+Redirecting to: systemctl start ipsec.service
 east #
  /testing/pluto/bin/wait-until-pluto-started
 east #
@@ -14,6 +14,7 @@ east #
 000 "westnet-eastnet-ipv4-psk-ikev2":   xauth us:none, xauth them:none,  my_username=[any]; their_username=[any]
 000 "westnet-eastnet-ipv4-psk-ikev2":   our auth:secret, their auth:secret
 000 "westnet-eastnet-ipv4-psk-ikev2":   modecfg info: us:none, them:none, modecfg policy:push, dns:unset, domains:unset, banner:unset, cat:unset;
+000 "westnet-eastnet-ipv4-psk-ikev2":   labeled_ipsec:no;
 000 "westnet-eastnet-ipv4-psk-ikev2":   policy_label:unset;
 000 "westnet-eastnet-ipv4-psk-ikev2":   ike_life: 3600s; ipsec_life: 28800s; replay_window: 32; rekey_margin: 540s; rekey_fuzz: 100%; keyingtries: 0;
 000 "westnet-eastnet-ipv4-psk-ikev2":   retransmit-interval: 9999ms; retransmit-timeout: 99s;
@@ -24,7 +25,7 @@ east #
 000 "westnet-eastnet-ipv4-psk-ikev2":   our idtype: ID_FQDN; our id=@east; their idtype: ID_FQDN; their id=@west
 000 "westnet-eastnet-ipv4-psk-ikev2":   dpd: action:hold; delay:0; timeout:0; nat-t: encaps:auto; nat_keepalive:yes; ikev1_natt:both
 000 "westnet-eastnet-ipv4-psk-ikev2":   newest ISAKMP SA: #0; newest IPsec SA: #0;
-000 "westnet-eastnet-ipv4-psk-ikev2":   IKE algorithms: AES_CBC_128-HMAC_SHA2_256-MODP2048+MODP3072+MODP4096+MODP8192+DH19+DH20+DH21+DH31
+000 "westnet-eastnet-ipv4-psk-ikev2":   IKE algorithms: AES_CBC_128-HMAC_SHA2_256-MODP2048
 east #
  echo "initdone"
 initdone
@@ -61,6 +62,7 @@ default via 192.1.2.254 dev eth1
 192.0.1.0/24 via 192.1.2.45 dev eth1
 192.0.2.0/24 dev eth0 proto kernel scope link src 192.0.2.254
 192.1.2.0/24 dev eth1 proto kernel scope link src 192.1.2.23
+192.9.2.0/24 dev eth2 proto kernel scope link src 192.9.2.23
 NSS_CERTIFICATES
 Certificate Nickname                                         Trust Attributes
                                                              SSL,S/MIME,JAR/XPI

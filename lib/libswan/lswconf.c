@@ -186,7 +186,9 @@ int libreswan_selinux(void)
 		/* try new location first, then old location */
 		fd = fopen("/selinux/enforce", "r");
 		if (fd == NULL) {
-			DBGF(DBG_CONTROL, "SElinux: disabled, could not open /sys/fs/selinux/enforce or /selinux/enforce");
+			DBG(DBG_CONTROL,
+				DBG_log("SElinux: disabled, could not open /sys/fs/selinux/enforce or /selinux/enforce");
+				);
 			return 0;
 		}
 	}

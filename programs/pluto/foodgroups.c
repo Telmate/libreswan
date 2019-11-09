@@ -2,8 +2,6 @@
  * Copyright (C) 2002  D. Hugh Redelmeier.
  * Copyright (C) 2005 Michael Richardson <mcr@xelerance.com>
  * Copyright (C) 2009-2010 Paul Wouters <paul@xelerance.com>
- * Copyright (C) 2019 Andrew Cagney <cagney@gnu.org>
- * Copyright (C) 2019 D. Hugh Redelmeier <hugh@mimosa.com>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -24,6 +22,7 @@
 #include <stdlib.h>
 #include <limits.h> /* PATH_MAX */
 
+#include <libreswan.h>
 
 #include "sysdep.h"
 #include "constants.h"
@@ -38,7 +37,7 @@
 #include "lex.h"
 #include "log.h"
 #include "whack.h"
-#include "ip_info.h"
+#include "af_info.h"
 
 #include <errno.h>
 
@@ -88,12 +87,13 @@ static struct fg_targets *new_targets;
  */
 static int subnetcmp(const ip_subnet *a, const ip_subnet *b)
 {
+	ip_address neta, maska, netb, maskb;
 	int r;
 
-	ip_address neta = subnet_prefix(a);
-	ip_address maska = subnet_mask(a);
-	ip_address netb = subnet_prefix(b);
-	ip_address maskb = subnet_mask(b);
+	networkof(a, &neta);
+	maskof(a, &maska);
+	networkof(b, &netb);
+	maskof(b, &maskb);
 	r = addrcmp(&neta, &netb);
 	if (r == 0)
 		r = addrcmp(&maska, &maskb);
@@ -127,9 +127,9 @@ static void read_foodgroup(struct fg_groups *g)
 			switch (flp->bdry) {
 			case B_none:
 			{
-				const struct ip_info *afi =
+				const struct af_info *afi =
 					strchr(flp->tok, ':') == NULL ?
-					&ipv4_info : &ipv6_info;
+					&af_inet4_info : &af_inet6_info;
 				ip_subnet sn;
 				err_t ugh;
 
@@ -143,7 +143,7 @@ static void read_foodgroup(struct fg_groups *g)
 						ugh = addrtosubnet(&t, &sn);
 				} else {
 					ugh = ttosubnet(flp->tok, 0, afi->af,
-							'x', &sn);
+							&sn);
 				}
 
 				if (ugh != NULL) {
@@ -237,23 +237,29 @@ static void read_foodgroup(struct fg_groups *g)
 						if (r != 0)
 							break;
 
-						if (proto == (*pp)->proto &&
-						    sport == (*pp)->sport &&
-						    dport == (*pp)->dport) {
+						if (proto == (*pp)->proto && sport == (*pp)->sport && dport == (*pp)->dport) {
+							/* ??? we know that r == 0: why set it again? */
+							r = 0;
 							break;
+						} else {
+							/* ??? since we are looping, r's value won't be used */
+							r = 1;
 						}
 					}
 
 					if (r == 0) {
-						subnet_buf source;
-						subnet_buf dest;
+						char source[SUBNETTOT_BUF];
+						char dest[SUBNETTOT_BUF];
+
+						subnettot(lsn, 0, source, sizeof(source));
+						subnettot(&sn, 0, dest, sizeof(dest));
 						loglog(RC_LOG_SERIOUS,
 						       "\"%s\" line %d: subnet \"%s\", proto %d, sport %d dport %d, source %s, already \"%s\"",
 						       flp->filename,
 						       flp->lino,
-						       str_subnet(&sn, &dest),
+						       dest,
 						       proto, sport, dport,
-						       str_subnet(lsn, &source),
+						       source,
 						       (*pp)->group->connection->name);
 					} else {
 						struct fg_targets *f =
@@ -313,17 +319,23 @@ void load_groups(void)
 	}
 
 	/* dump new_targets */
-	if (DBG_BASE) {
-		for (struct fg_targets *t = new_targets; t != NULL; t = t->next) {
-			subnet_buf asource;
-			subnet_buf atarget;
-			DBG_log("%s->%s %d sport %d dport %d %s",
-				str_subnet_port(&t->group->connection->spd.this.client, &asource),
-				str_subnet_port(&t->subnet, &atarget),
-				t->proto, t->sport, t->dport,
-				t->group->connection->name);
-		}
-	    }
+	DBG(DBG_CONTROL,
+	    {
+		    struct fg_targets *t;
+
+		    for (t = new_targets; t != NULL; t = t->next) {
+			    char asource[SUBNETTOT_BUF];
+			    char atarget[SUBNETTOT_BUF];
+
+			    subnettot(&t->group->connection->spd.this.client,
+				      0, asource, sizeof(asource));
+			    subnettot(&t->subnet, 0, atarget, sizeof(atarget));
+			    DBG_log("%s->%s %d sport %d dport %d %s",
+				    asource, atarget,
+					t->proto, t->sport, t->dport,
+				    t->group->connection->name);
+		    }
+	    });
 
 	/* determine and deal with differences between targets and new_targets.
 	 * structured like a merge.
@@ -455,37 +467,37 @@ void unroute_group(struct connection *c)
 
 void delete_group(const struct connection *c)
 {
-	/*
-	 * find and remove from groups
-	 */
-	struct fg_groups *g = NULL;
-	for (struct fg_groups **pp = &groups; *pp != NULL; pp = &(*pp)->next) {
-		if ((*pp)->connection == c) {
-			g = *pp;
-			*pp = g->next;
-			break;
-		}
+	struct fg_groups *g;
+
+	/* find and remove from groups */
+	{
+		struct fg_groups **pp;
+
+		for (pp = &groups; (g = *pp)->connection != c;
+		     pp = &(*pp)->next)
+			;
+
+		*pp = g->next;
 	}
 
-	/*
-	 * find and remove from targets
-	 */
-	if (pexpect(g != NULL)) {
-		struct fg_targets **pp = &targets;
-		while (*pp != NULL) {
+	/* find and remove from targets */
+	{
+		struct fg_targets **pp;
+
+		for (pp = &targets; *pp != NULL; ) {
 			struct fg_targets *t = *pp;
+
 			if (t->group == g) {
-				/* remove *PP but advance first */
 				*pp = t->next;
 				remove_group_instance(t->group->connection,
 						      t->name);
 				pfree(t);
 				/* pp is ready for next iteration */
 			} else {
-				/* advance PP */
 				pp = &t->next;
 			}
 		}
-		pfree(g);
 	}
+
+	pfree(g);
 }

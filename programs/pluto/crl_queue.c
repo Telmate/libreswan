@@ -1,7 +1,6 @@
 /* CRL fetch queue, for libreswan
  *
  * Copyright (C) 2018 Andrew Cagney
- * Copyright (C) 2019 D. Hugh Redelmeier <hugh@mimosa.com>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -35,7 +34,7 @@ static generalName_t *deep_clone_general_names(generalName_t *orig)
 	while (orig != NULL) {
 		*new = alloc_thing(generalName_t, "crl_queue: general name");
 		(*new)->kind = orig->kind;
-		(*new)->name = clone_hunk(orig->name, "crl_queue: general name name");
+		(*new)->name = clone_chunk(orig->name, "crl_queue: general name name");
 		(*new)->next = NULL;
 		orig = orig->next;
 		new = &(*new)->next;
@@ -74,13 +73,13 @@ struct crl_fetch_request *crl_fetch_request(SECItem *issuer_dn,
 	if (cert_dps != NULL) {
 		request_dps = deep_clone_general_names(cert_dps);
 		free_generalNames(cert_dps, false /*shallow*/);
-	} else if (end_dps != NULL) {
+	} else {
+		if (end_dps == NULL) {
+			dbg("no distribution point available for new fetch request");
+			return next;
+		}
 		dbg("no CA crl DP available; using provided DP");
 		request_dps = deep_clone_general_names(end_dps);
-	} else {
-		dbg("no distribution point available for new fetch request");
-		CERT_DestroyCertificate(ca);
-		return next;
 	}
 	CERT_DestroyCertificate(ca);
 

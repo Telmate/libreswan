@@ -4,8 +4,7 @@
  * Copyright (C) 2002-2004 Andreas Steffen, Zuercher Hochschule Winterthur
  * Copyright (C) 2003-2008 Paul Wouters <paul@xelerance.com>
  * Copyright (C) 2005 Michael Richardson <mcr@xelerance.com>
- * Copyright (C) 2018-2019 Andrew Cagney <cagney@gnu.org>
- * Copyright (C) 2019 D. Hugh Redelmeier <hugh@mimosa.com>
+ * Copyright (C) 2018 Andrew Cagney
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -30,6 +29,7 @@
 #include <cert.h>
 #include <certdb.h>
 
+#include <libreswan.h>
 
 #include "constants.h"
 #include "defs.h"
@@ -45,7 +45,7 @@
 #include "nss_err.h"
 #include "keys.h"
 #include "crl_queue.h"
-#include "server.h"
+#include "timer.h"
 
 #define FETCH_CMD_TIMEOUT       5       /* seconds */
 
@@ -133,7 +133,7 @@ static err_t fetch_curl(chunk_t url,
 {
 	char errorbuffer[CURL_ERROR_SIZE] = "";
 	char *uri;
-	chunk_t response = EMPTY_CHUNK;	/* managed by realloc/free */
+	chunk_t response = empty_chunk;	/* managed by realloc/free */
 	long timeout = FETCH_CMD_TIMEOUT;
 	CURLcode res;
 
@@ -165,7 +165,7 @@ static err_t fetch_curl(chunk_t url,
 
 		if (res == CURLE_OK) {
 			/* clone from realloc(3)ed memory to pluto-allocated memory */
-			*blob = clone_hunk(response, "curl blob");
+			*blob = clone_chunk(response, "curl blob");
 		} else {
 			libreswan_log("fetching uri (%s) with libcurl failed: %s", uri,
 			     errorbuffer);
@@ -347,7 +347,7 @@ static err_t fetch_asn1_blob(chunk_t url, chunk_t *blob)
 {
 	err_t ugh = NULL;
 
-	*blob = EMPTY_CHUNK;
+	*blob = empty_chunk;
 	if (url.len >= 5 && strncaseeq((const char *)url.ptr, "ldap:", 5))
 		ugh = fetch_ldap_url(url, blob);
 	else
@@ -450,7 +450,7 @@ static void fetch_crls(void)
  */
 void check_crls(void)
 {
-	schedule_oneshot_timer(EVENT_CHECK_CRLS, crl_check_interval);
+	event_schedule(EVENT_CHECK_CRLS, crl_check_interval, NULL);
 	struct crl_fetch_request *requests = NULL;
 
 	/*
@@ -563,13 +563,6 @@ static void *fetch_thread(void *arg UNUSED)
  */
 void init_fetch(void)
 {
-	/*
-	 * XXX: CRT checking is probably really a periodic timer,
-	 * however: the first fetch 5 seconds after startup; and
-	 * further fetches are defined by the config(?) file (is that
-	 * loaded before this function was called?).
-	 */
-	init_oneshot_timer(EVENT_CHECK_CRLS, check_crls);
 	if (deltasecs(crl_check_interval) > 0) {
 		int status;
 
@@ -585,7 +578,7 @@ void init_fetch(void)
 			libreswan_log(
 				"could not start thread for fetching certificate, status = %d",
 				status);
-		schedule_oneshot_timer(EVENT_CHECK_CRLS, deltatime(5));
+		event_schedule(EVENT_CHECK_CRLS, deltatime(5), NULL);
 	}
 }
 
@@ -624,7 +617,7 @@ static void add_distribution_points(const generalName_t *newPoints,
 				 * Clone additional distribution point.
 				 */
 				generalName_t *ngn = clone_const_thing(*newPoints, "generalName");
-				ngn->name = clone_hunk(newPoints->name,
+				ngn->name = clone_chunk(newPoints->name,
 							"add_distribution_points: general name name");
 				/* insert additional CRL distribution point */
 				ngn->next = *distributionPoints;
@@ -670,7 +663,7 @@ static void merge_crl_fetch_request(struct crl_fetch_request *request)
 				.trials = 0,
 
 				/* clone issuer (again) */
-				.issuer = clone_hunk(idn, "issuer dn"),
+				.issuer = clone_chunk(idn, "issuer dn"),
 
 				.distributionPoints = NULL,
 			};
@@ -726,13 +719,13 @@ void list_crl_fetch_requests(bool utc)
 	}
 
 	for (; req != NULL; req = req->next) {
+		char buf[ASN1_BUF_LEN];
 		LSWLOG_WHACK(RC_COMMENT, buf) {
 			lswlog_realtime(buf, req->installed, utc);
 			lswlogf(buf, ", trials: %d", req->trials);
 		}
-		dn_buf buf;
-		whack_log(RC_COMMENT, "       issuer:  '%s'",
-			  str_dn(req->issuer, &buf));
+		dntoa(buf, ASN1_BUF_LEN, req->issuer);
+		whack_log(RC_COMMENT, "       issuer:  '%s'", buf);
 		list_distribution_points(req->distributionPoints);
 	}
 

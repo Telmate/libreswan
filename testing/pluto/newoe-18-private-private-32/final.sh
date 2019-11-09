@@ -1,5 +1,5 @@
 ../../pluto/bin/ipsec-look.sh
-# tunnel should have been established once - idleness check should prevent rekeying for OE
+# tunnel should have been established
 grep "negotiated connection" /tmp/pluto.log
 : ==== cut ====
 ipsec auto --status

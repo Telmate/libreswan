@@ -1,9 +1,9 @@
 /*
  * Libreswan config file writer (confwrite.c)
  * Copyright (C) 2004-2006 Michael Richardson <mcr@xelerance.com>
- * Copyright (C) 2012-2019 Paul Wouters <pwouters@redhat.com>
+ * Copyright (C) 2012-2015 Paul Wouters <pwouters@redhat.com>
  * Copyright (C) 2013-2015 Antony Antony <antony@phenome.org>
- * Copyright (C) 2013-2019 D. Hugh Redelmeier <hugh@mimosa.com>
+ * Copyright (C) 2013 D. Hugh Redelmeier <hugh@mimosa.com>
  * Copyright (C) 2013 David McCullough <ucdevel@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -290,7 +290,8 @@ static void confwrite_side(FILE *out,
 		break;
 
 	case KH_IPHOSTNAME:
-		fprintf(out, "\t%s=%s\n", side, end->strings[KSCF_IP]);
+		if (end->strings_set[KSCF_IP])
+			fprintf(out, "\t%s=%s\n", side, end->strings[KSCF_IP]);
 		break;
 
 	case KH_IPADDR:
@@ -329,17 +330,20 @@ static void confwrite_side(FILE *out,
 
 	if (end->has_client) {
 		if (!subnetishost(&end->subnet) ||
-		     !addrinsubnet(&end->addr, &end->subnet)) {
-			subnet_buf as;
-			fprintf(out, "\t%ssubnet=%s\n", side,
-				str_subnet(&end->subnet, &as));
+		     !addrinsubnet(&end->addr, &end->subnet))
+		{
+			char as[ADDRTOT_BUF];
+
+			subnettot(&end->subnet, 0, as, sizeof(as));
+			fprintf(out, "\t%ssubnet=%s\n", side, as);
 		}
 	}
 
-	if (subnet_is_specified(&end->vti_ip)) {
-		subnet_buf as;
-		fprintf(out, "\t%svti=%s\n", side,
-			str_subnet(&end->vti_ip, &as));
+	if (!isanyaddr(&end->vti_ip.addr)) {
+			char as[ADDRTOT_BUF];
+
+			subnettot(&end->vti_ip, 0, as, sizeof(as));
+			fprintf(out, "\t%svti=%s\n", side, as);
 	}
 
 	if (end->rsakey1 != NULL && end->rsakey1[0] != '\0')
@@ -362,20 +366,22 @@ static void confwrite_side(FILE *out,
 			protostr, portstr);
 	}
 
-	if (end->certx != NULL)
-		fprintf(out, "\t%scert=%s\n", side, end->certx);
+	if (end->cert != NULL)
+		fprintf(out, "\t%scert=%s\n", side, end->cert);
 
-	if (address_is_specified(&end->sourceip)) {
+	if (!isanyaddr(&end->sourceip)) {
 		ipstr_buf as;
 
 		fprintf(out, "\t%ssourceip=%s\n",
 			side, ipstr(&end->sourceip, &as));
 	}
+
 	confwrite_int(out, side,
 		      kv_conn | kv_leftright,
 		      end->options, end->options_set, end->strings);
 	confwrite_str(out, side, kv_conn | kv_leftright,
 		      end->strings, end->strings_set);
+
 }
 
 static void confwrite_comments(FILE *out, struct starter_conn *conn)
@@ -538,7 +544,7 @@ static void confwrite_conn(FILE *out, struct starter_conn *conn, bool verbose)
 				if (conn->policy & POLICY_IKEV2_ALLOW)
 					v2ps = "yes";
 
-				if (conn->policy & POLICY_IKEV1_ALLOW)
+				if (conn->policy & POLICY_IKEV2_ALLOW)
 					v2ps = "no";
 
 				cwf("ikev2", v2ps);
@@ -571,6 +577,7 @@ static void confwrite_conn(FILE *out, struct starter_conn *conn, bool verbose)
 						esn = "no";
 					else
 						esn = "either";
+
 				} else {
 						/* both cannot be unset */
 						esn = "yes";
@@ -642,7 +649,7 @@ void confwrite(struct starter_config *cfg, FILE *out, bool setup, char *name, bo
 		      kv_config,
 		      cfg->setup.strings, cfg->setup.strings_set);
 
-		fprintf(out, "\n");
+		fprintf(out, "\n\n");
 	}
 
 	/* output connections */

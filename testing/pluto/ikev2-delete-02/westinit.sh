@@ -10,5 +10,4 @@ ipsec start
 /testing/pluto/bin/wait-until-pluto-started
 ipsec auto --add west-east-delete1
 ipsec whack --impair suppress-retransmits
-ipsec whack --impair revival
 echo "initdone"

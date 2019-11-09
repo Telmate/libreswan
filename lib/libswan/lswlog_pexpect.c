@@ -1,4 +1,4 @@
-/* Output an expectation failure, for libreswan
+/* Output an expection failure, for libreswan
  *
  * Copyright (C) 2017 Andrew Cagney
  *
@@ -22,8 +22,9 @@ void lswlog_pexpect_prefix(struct lswlog *buf)
 	lswlogs(buf, "EXPECTATION FAILED: ");
 }
 
-void lswlog_pexpect_suffix(struct lswlog *buf, where_t where)
+void lswlog_pexpect_suffix(struct lswlog *buf, const char *func,
+			     const char *file, unsigned long line)
 {
-	jam(buf, " "PRI_WHERE, pri_where(where));
+	lswlog_source_line(buf, func, file, line);
 	lswlog_to_error_stream(buf);
 }
