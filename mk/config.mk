@@ -241,9 +241,11 @@ NSPR_LDFLAGS ?= -lnspr4
 
 # Use nss copy for CERT_CompareAVA
 # See https://bugzilla.mozilla.org/show_bug.cgi?id=1336487
+
 NSS_REQ_AVA_COPY?=true
 ifeq ($(NSS_REQ_AVA_COPY),true)
 NSSFLAGS+=-DNSS_REQ_AVA_COPY
+SS_REQ_AVA_COPY
 endif
 
 # Use nss IPsec profile for X509 validation. This is less restrictive

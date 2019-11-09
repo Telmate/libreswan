@@ -30,6 +30,10 @@
 
 #include "fd.h"
 
+#include "proposals.h"
+#include <security/pam_appl.h>
+
+
 /* There are two kinds of connections:
  * - ISAKMP connections, between hosts (for IKE communication)
  * - IPsec connections, between clients (for secure IP communication)

@@ -42,6 +42,9 @@ struct xauth {
 	monotime_t start_time;
 	xauth_callback_t *callback;
 	pid_t child;
+
+	pam_handle_t *ptr_pam_ptr;
+
 };
 
 static void pfree_xauth(struct xauth *x)

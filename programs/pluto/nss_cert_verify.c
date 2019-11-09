@@ -256,10 +256,12 @@ static int vfy_chain_pkix(CERTCertificate **chain, int chain_len,
 		}
 	}
 
+
 	if (end_cert == NULL) {
 		libreswan_log("X509: no EE-cert in chain!");
 		return VERIFY_RET_FAIL;
 	}
+
 
 
 	CERTVerifyLog *cur_log = NULL;
