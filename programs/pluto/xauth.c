@@ -16,9 +16,9 @@
 #ifdef XAUTH_HAVE_PAM
 
 #include <pthread.h> /* Must be the first include file */
-
+//#include <security/pam_appl.h> /* needed for pam_handle_t */
+//#include "connections.h"
 #include <stdlib.h>
-
 #include "constants.h"
 #include "lswlog.h"
 #include "defs.h"
@@ -43,7 +43,7 @@ struct xauth {
 	xauth_callback_t *callback;
 	bool abort;
 	pid_t child;
-	pam_handle_t *ptr_pam_ptr = NULL;
+	pam_handle_t *ptr_pam_ptr;
 };
 
 static void pfree_xauth(struct xauth *x)

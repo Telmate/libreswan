@@ -42,7 +42,7 @@
 #include "plutoalg.h"
 #include "crypto.h"
 #include "db_ops.h"
-
+#include <security/pam_appl.h>
 static void show_system_security(void)
 {
 	int selinux = libreswan_selinux();

@@ -180,7 +180,7 @@ bool do_pam_authentication(struct pam_thread_arg *arg)
         }
 		log_pam_step(arg, what);
 
-        what = "pam_open_session"
+        what = "pam_open_session";
         retval = pam_open_session(pamh, 0); /* permitted access? */
         if (retval != PAM_SUCCESS) {
           pam_end(pamh, retval);
@@ -194,7 +194,7 @@ bool do_pam_authentication(struct pam_thread_arg *arg)
          * or we have a pam error.
          * */
         arg->ptr_pam_ptr = pamh;
-		return TRUE;
+	return TRUE;
 	} while (FALSE);
 
 	/* common failure code */
@@ -202,14 +202,14 @@ bool do_pam_authentication(struct pam_thread_arg *arg)
 		      arg->atype, what, pam_strerror(pamh, retval),
 		      arg->st_serialno, arg->c_name, arg->c_instance_serial,
 		      arg->name);
-    if(pamh =! NULL) {
-      pam_end(pamh, retval);
-      pamh = NULL;
-    }
+    	if(pamh != NULL) {
+      		pam_end(pamh, retval);
+      		pamh = NULL;
+    	}
 	return FALSE;
 }
 
-bool impl_pam_close_session(pam_handle_t *pamh)
+bool impl_pam_close_session(void *pamh)
 {
   int retval;
 

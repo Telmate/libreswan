@@ -88,7 +88,7 @@
 #include "crypto.h"
 #include "kernel_netlink.h"
 #include "ip_address.h"
-
+#include "pam_conv.h"
 struct connection *connections = NULL;
 
 struct connection *unoriented_connections = NULL;
