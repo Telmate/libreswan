@@ -4481,6 +4481,7 @@ void liveness_action(struct connection *c, const bool ikev2)
 		libreswan_log("%s action - clearing connection kind %s", ikev,
 				enum_name(&connection_kind_names, c->kind));
 		liveness_clear_connection(c, ikev);
+        impl_pam_close_session(c->ptr_gtl_pam_session);
 		break;
 
 	case DPD_ACTION_RESTART:

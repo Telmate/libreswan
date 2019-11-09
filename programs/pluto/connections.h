@@ -137,6 +137,7 @@ extern void fmt_policy_prio(policy_prio_t pp, char buf[POLICY_PRIO_BUF]);
 #include <sys/queue.h>
 #include "id.h"    /* for struct id */
 #include "lmod.h"
+#include <security/pam_appl.h>
 
 struct virtual_t;
 
@@ -256,6 +257,8 @@ struct connection {
 	bool sha2_truncbug;
 	enum ikev1_natt_policy ikev1_natt; /* whether or not to send IKEv1 draft/rfc NATT VIDs */
 	enum encaps_options encaps; /* encapsulation mode of auto/yes/no - formerly forceencaps=yes/no */
+
+    pam_handle_t *ptr_gtl_pam_session;       /* keep the handle alive for the as long as the connection is */
 
 	/* Network Manager support */
 #ifdef HAVE_NM
