@@ -17,7 +17,6 @@ west #
  # confirm clear text does not get through
 west #
  ../../pluto/bin/ping-once.sh --down -I 192.0.1.254 192.0.2.254
-[ 00.00] IN=eth1 OUT= MAC=12:00:00:64:64:45:12:00:00:64:64:23:08:00 SRC=192.0.2.254 DST=192.0.1.254 LEN=XXXX TOS=0x00 PREC=0x00 TTL=64 ID=XXXXX PROTO=ICMP TYPE=0 CODE=0 ID=XXXX SEQ=1 
 down
 west #
  ipsec _stackmanager start
@@ -58,12 +57,12 @@ initdone
 west #
  ipsec auto --up ikev2-westnet-eastnet-x509-cr
 002 "ikev2-westnet-eastnet-x509-cr" #1: initiating v2 parent SA
-133 "ikev2-westnet-eastnet-x509-cr" #1: initiate
-133 "ikev2-westnet-eastnet-x509-cr" #1: STATE_PARENT_I1: sent v2I1, expected v2R1
-134 "ikev2-westnet-eastnet-x509-cr" #2: STATE_PARENT_I2: sent v2I2, expected v2R2 {auth=IKEv2 cipher=AES_GCM_16_256 integ=n/a prf=HMAC_SHA2_512 group=MODP2048}
+1v2 "ikev2-westnet-eastnet-x509-cr" #1: initiate
+1v2 "ikev2-westnet-eastnet-x509-cr" #1: STATE_PARENT_I1: sent v2I1, expected v2R1
+1v2 "ikev2-westnet-eastnet-x509-cr" #2: STATE_PARENT_I2: sent v2I2, expected v2R2 {auth=IKEv2 cipher=AES_GCM_16_256 integ=n/a prf=HMAC_SHA2_512 group=MODP2048}
 002 "ikev2-westnet-eastnet-x509-cr" #2: certificate verified OK: E=user-east@testing.libreswan.org,CN=east.testing.libreswan.org,OU=Test Department,O=Libreswan,L=Toronto,ST=Ontario,C=CA
 002 "ikev2-westnet-eastnet-x509-cr" #2: IKEv2 mode peer ID is ID_DER_ASN1_DN: 'C=CA, ST=Ontario, L=Toronto, O=Libreswan, OU=Test Department, CN=east.testing.libreswan.org, E=user-east@testing.libreswan.org'
-003 "ikev2-westnet-eastnet-x509-cr" #2: Authenticated using RSA
+003 "ikev2-westnet-eastnet-x509-cr" #2: Authenticated using RSA with IKEv2_AUTH_HASH_SHA2_512
 002 "ikev2-westnet-eastnet-x509-cr" #2: negotiated connection [192.0.1.0-192.0.1.255:0-65535 0] -> [192.0.2.0-192.0.2.255:0-65535 0]
 004 "ikev2-westnet-eastnet-x509-cr" #2: STATE_V2_IPSEC_I: IPsec SA established tunnel mode {ESP=>0xESPESP <0xESPESP xfrm=AES_GCM_16_256-NONE NATOA=none NATD=none DPD=passive}
 west #
@@ -82,82 +81,94 @@ west #
 west #
  ipsec auto --down ikev2-westnet-eastnet-x509-cr
 002 "ikev2-westnet-eastnet-x509-cr": terminating SAs using this connection
+002 "ikev2-westnet-eastnet-x509-cr" #2: deleting state (STATE_V2_IPSEC_I) and sending notification
 005 "ikev2-westnet-eastnet-x509-cr" #2: ESP traffic information: in=336B out=336B
+002 "ikev2-westnet-eastnet-x509-cr" #1: deleting state (STATE_PARENT_I3) and sending notification
 west #
  ipsec auto --up ikev2-westnet-eastnet-x509-cr
 002 "ikev2-westnet-eastnet-x509-cr" #3: initiating v2 parent SA
-133 "ikev2-westnet-eastnet-x509-cr" #3: initiate
-133 "ikev2-westnet-eastnet-x509-cr" #3: STATE_PARENT_I1: sent v2I1, expected v2R1
-134 "ikev2-westnet-eastnet-x509-cr" #4: STATE_PARENT_I2: sent v2I2, expected v2R2 {auth=IKEv2 cipher=AES_GCM_16_256 integ=n/a prf=HMAC_SHA2_512 group=MODP2048}
+1v2 "ikev2-westnet-eastnet-x509-cr" #3: initiate
+1v2 "ikev2-westnet-eastnet-x509-cr" #3: STATE_PARENT_I1: sent v2I1, expected v2R1
+1v2 "ikev2-westnet-eastnet-x509-cr" #4: STATE_PARENT_I2: sent v2I2, expected v2R2 {auth=IKEv2 cipher=AES_GCM_16_256 integ=n/a prf=HMAC_SHA2_512 group=MODP2048}
 002 "ikev2-westnet-eastnet-x509-cr" #4: certificate verified OK: E=user-east@testing.libreswan.org,CN=east.testing.libreswan.org,OU=Test Department,O=Libreswan,L=Toronto,ST=Ontario,C=CA
 002 "ikev2-westnet-eastnet-x509-cr" #4: IKEv2 mode peer ID is ID_DER_ASN1_DN: 'C=CA, ST=Ontario, L=Toronto, O=Libreswan, OU=Test Department, CN=east.testing.libreswan.org, E=user-east@testing.libreswan.org'
-003 "ikev2-westnet-eastnet-x509-cr" #4: Authenticated using RSA
+003 "ikev2-westnet-eastnet-x509-cr" #4: Authenticated using RSA with IKEv2_AUTH_HASH_SHA2_512
 002 "ikev2-westnet-eastnet-x509-cr" #4: negotiated connection [192.0.1.0-192.0.1.255:0-65535 0] -> [192.0.2.0-192.0.2.255:0-65535 0]
 004 "ikev2-westnet-eastnet-x509-cr" #4: STATE_V2_IPSEC_I: IPsec SA established tunnel mode {ESP=>0xESPESP <0xESPESP xfrm=AES_GCM_16_256-NONE NATOA=none NATD=none DPD=passive}
 west #
  ipsec auto --down ikev2-westnet-eastnet-x509-cr
 002 "ikev2-westnet-eastnet-x509-cr": terminating SAs using this connection
+002 "ikev2-westnet-eastnet-x509-cr" #4: deleting state (STATE_V2_IPSEC_I) and sending notification
 005 "ikev2-westnet-eastnet-x509-cr" #4: ESP traffic information: in=0B out=0B
+002 "ikev2-westnet-eastnet-x509-cr" #3: deleting state (STATE_PARENT_I3) and sending notification
 west #
  ipsec auto --up ikev2-westnet-eastnet-x509-cr
 002 "ikev2-westnet-eastnet-x509-cr" #5: initiating v2 parent SA
-133 "ikev2-westnet-eastnet-x509-cr" #5: initiate
-133 "ikev2-westnet-eastnet-x509-cr" #5: STATE_PARENT_I1: sent v2I1, expected v2R1
-134 "ikev2-westnet-eastnet-x509-cr" #6: STATE_PARENT_I2: sent v2I2, expected v2R2 {auth=IKEv2 cipher=AES_GCM_16_256 integ=n/a prf=HMAC_SHA2_512 group=MODP2048}
+1v2 "ikev2-westnet-eastnet-x509-cr" #5: initiate
+1v2 "ikev2-westnet-eastnet-x509-cr" #5: STATE_PARENT_I1: sent v2I1, expected v2R1
+1v2 "ikev2-westnet-eastnet-x509-cr" #6: STATE_PARENT_I2: sent v2I2, expected v2R2 {auth=IKEv2 cipher=AES_GCM_16_256 integ=n/a prf=HMAC_SHA2_512 group=MODP2048}
 002 "ikev2-westnet-eastnet-x509-cr" #6: certificate verified OK: E=user-east@testing.libreswan.org,CN=east.testing.libreswan.org,OU=Test Department,O=Libreswan,L=Toronto,ST=Ontario,C=CA
 002 "ikev2-westnet-eastnet-x509-cr" #6: IKEv2 mode peer ID is ID_DER_ASN1_DN: 'C=CA, ST=Ontario, L=Toronto, O=Libreswan, OU=Test Department, CN=east.testing.libreswan.org, E=user-east@testing.libreswan.org'
-003 "ikev2-westnet-eastnet-x509-cr" #6: Authenticated using RSA
+003 "ikev2-westnet-eastnet-x509-cr" #6: Authenticated using RSA with IKEv2_AUTH_HASH_SHA2_512
 002 "ikev2-westnet-eastnet-x509-cr" #6: negotiated connection [192.0.1.0-192.0.1.255:0-65535 0] -> [192.0.2.0-192.0.2.255:0-65535 0]
 004 "ikev2-westnet-eastnet-x509-cr" #6: STATE_V2_IPSEC_I: IPsec SA established tunnel mode {ESP=>0xESPESP <0xESPESP xfrm=AES_GCM_16_256-NONE NATOA=none NATD=none DPD=passive}
 west #
  ipsec auto --down ikev2-westnet-eastnet-x509-cr
 002 "ikev2-westnet-eastnet-x509-cr": terminating SAs using this connection
+002 "ikev2-westnet-eastnet-x509-cr" #6: deleting state (STATE_V2_IPSEC_I) and sending notification
 005 "ikev2-westnet-eastnet-x509-cr" #6: ESP traffic information: in=0B out=0B
+002 "ikev2-westnet-eastnet-x509-cr" #5: deleting state (STATE_PARENT_I3) and sending notification
 west #
  ipsec auto --up ikev2-westnet-eastnet-x509-cr
 002 "ikev2-westnet-eastnet-x509-cr" #7: initiating v2 parent SA
-133 "ikev2-westnet-eastnet-x509-cr" #7: initiate
-133 "ikev2-westnet-eastnet-x509-cr" #7: STATE_PARENT_I1: sent v2I1, expected v2R1
-134 "ikev2-westnet-eastnet-x509-cr" #8: STATE_PARENT_I2: sent v2I2, expected v2R2 {auth=IKEv2 cipher=AES_GCM_16_256 integ=n/a prf=HMAC_SHA2_512 group=MODP2048}
+1v2 "ikev2-westnet-eastnet-x509-cr" #7: initiate
+1v2 "ikev2-westnet-eastnet-x509-cr" #7: STATE_PARENT_I1: sent v2I1, expected v2R1
+1v2 "ikev2-westnet-eastnet-x509-cr" #8: STATE_PARENT_I2: sent v2I2, expected v2R2 {auth=IKEv2 cipher=AES_GCM_16_256 integ=n/a prf=HMAC_SHA2_512 group=MODP2048}
 002 "ikev2-westnet-eastnet-x509-cr" #8: certificate verified OK: E=user-east@testing.libreswan.org,CN=east.testing.libreswan.org,OU=Test Department,O=Libreswan,L=Toronto,ST=Ontario,C=CA
 002 "ikev2-westnet-eastnet-x509-cr" #8: IKEv2 mode peer ID is ID_DER_ASN1_DN: 'C=CA, ST=Ontario, L=Toronto, O=Libreswan, OU=Test Department, CN=east.testing.libreswan.org, E=user-east@testing.libreswan.org'
-003 "ikev2-westnet-eastnet-x509-cr" #8: Authenticated using RSA
+003 "ikev2-westnet-eastnet-x509-cr" #8: Authenticated using RSA with IKEv2_AUTH_HASH_SHA2_512
 002 "ikev2-westnet-eastnet-x509-cr" #8: negotiated connection [192.0.1.0-192.0.1.255:0-65535 0] -> [192.0.2.0-192.0.2.255:0-65535 0]
 004 "ikev2-westnet-eastnet-x509-cr" #8: STATE_V2_IPSEC_I: IPsec SA established tunnel mode {ESP=>0xESPESP <0xESPESP xfrm=AES_GCM_16_256-NONE NATOA=none NATD=none DPD=passive}
 west #
  ipsec auto --down ikev2-westnet-eastnet-x509-cr
 002 "ikev2-westnet-eastnet-x509-cr": terminating SAs using this connection
+002 "ikev2-westnet-eastnet-x509-cr" #8: deleting state (STATE_V2_IPSEC_I) and sending notification
 005 "ikev2-westnet-eastnet-x509-cr" #8: ESP traffic information: in=0B out=0B
+002 "ikev2-westnet-eastnet-x509-cr" #7: deleting state (STATE_PARENT_I3) and sending notification
 west #
  ipsec auto --up ikev2-westnet-eastnet-x509-cr
 002 "ikev2-westnet-eastnet-x509-cr" #9: initiating v2 parent SA
-133 "ikev2-westnet-eastnet-x509-cr" #9: initiate
-133 "ikev2-westnet-eastnet-x509-cr" #9: STATE_PARENT_I1: sent v2I1, expected v2R1
-134 "ikev2-westnet-eastnet-x509-cr" #10: STATE_PARENT_I2: sent v2I2, expected v2R2 {auth=IKEv2 cipher=AES_GCM_16_256 integ=n/a prf=HMAC_SHA2_512 group=MODP2048}
+1v2 "ikev2-westnet-eastnet-x509-cr" #9: initiate
+1v2 "ikev2-westnet-eastnet-x509-cr" #9: STATE_PARENT_I1: sent v2I1, expected v2R1
+1v2 "ikev2-westnet-eastnet-x509-cr" #10: STATE_PARENT_I2: sent v2I2, expected v2R2 {auth=IKEv2 cipher=AES_GCM_16_256 integ=n/a prf=HMAC_SHA2_512 group=MODP2048}
 002 "ikev2-westnet-eastnet-x509-cr" #10: certificate verified OK: E=user-east@testing.libreswan.org,CN=east.testing.libreswan.org,OU=Test Department,O=Libreswan,L=Toronto,ST=Ontario,C=CA
 002 "ikev2-westnet-eastnet-x509-cr" #10: IKEv2 mode peer ID is ID_DER_ASN1_DN: 'C=CA, ST=Ontario, L=Toronto, O=Libreswan, OU=Test Department, CN=east.testing.libreswan.org, E=user-east@testing.libreswan.org'
-003 "ikev2-westnet-eastnet-x509-cr" #10: Authenticated using RSA
+003 "ikev2-westnet-eastnet-x509-cr" #10: Authenticated using RSA with IKEv2_AUTH_HASH_SHA2_512
 002 "ikev2-westnet-eastnet-x509-cr" #10: negotiated connection [192.0.1.0-192.0.1.255:0-65535 0] -> [192.0.2.0-192.0.2.255:0-65535 0]
 004 "ikev2-westnet-eastnet-x509-cr" #10: STATE_V2_IPSEC_I: IPsec SA established tunnel mode {ESP=>0xESPESP <0xESPESP xfrm=AES_GCM_16_256-NONE NATOA=none NATD=none DPD=passive}
 west #
  ipsec auto --down ikev2-westnet-eastnet-x509-cr
 002 "ikev2-westnet-eastnet-x509-cr": terminating SAs using this connection
+002 "ikev2-westnet-eastnet-x509-cr" #10: deleting state (STATE_V2_IPSEC_I) and sending notification
 005 "ikev2-westnet-eastnet-x509-cr" #10: ESP traffic information: in=0B out=0B
+002 "ikev2-westnet-eastnet-x509-cr" #9: deleting state (STATE_PARENT_I3) and sending notification
 west #
  ipsec auto --up ikev2-westnet-eastnet-x509-cr
 002 "ikev2-westnet-eastnet-x509-cr" #11: initiating v2 parent SA
-133 "ikev2-westnet-eastnet-x509-cr" #11: initiate
-133 "ikev2-westnet-eastnet-x509-cr" #11: STATE_PARENT_I1: sent v2I1, expected v2R1
-134 "ikev2-westnet-eastnet-x509-cr" #12: STATE_PARENT_I2: sent v2I2, expected v2R2 {auth=IKEv2 cipher=AES_GCM_16_256 integ=n/a prf=HMAC_SHA2_512 group=MODP2048}
+1v2 "ikev2-westnet-eastnet-x509-cr" #11: initiate
+1v2 "ikev2-westnet-eastnet-x509-cr" #11: STATE_PARENT_I1: sent v2I1, expected v2R1
+1v2 "ikev2-westnet-eastnet-x509-cr" #12: STATE_PARENT_I2: sent v2I2, expected v2R2 {auth=IKEv2 cipher=AES_GCM_16_256 integ=n/a prf=HMAC_SHA2_512 group=MODP2048}
 002 "ikev2-westnet-eastnet-x509-cr" #12: certificate verified OK: E=user-east@testing.libreswan.org,CN=east.testing.libreswan.org,OU=Test Department,O=Libreswan,L=Toronto,ST=Ontario,C=CA
 002 "ikev2-westnet-eastnet-x509-cr" #12: IKEv2 mode peer ID is ID_DER_ASN1_DN: 'C=CA, ST=Ontario, L=Toronto, O=Libreswan, OU=Test Department, CN=east.testing.libreswan.org, E=user-east@testing.libreswan.org'
-003 "ikev2-westnet-eastnet-x509-cr" #12: Authenticated using RSA
+003 "ikev2-westnet-eastnet-x509-cr" #12: Authenticated using RSA with IKEv2_AUTH_HASH_SHA2_512
 002 "ikev2-westnet-eastnet-x509-cr" #12: negotiated connection [192.0.1.0-192.0.1.255:0-65535 0] -> [192.0.2.0-192.0.2.255:0-65535 0]
 004 "ikev2-westnet-eastnet-x509-cr" #12: STATE_V2_IPSEC_I: IPsec SA established tunnel mode {ESP=>0xESPESP <0xESPESP xfrm=AES_GCM_16_256-NONE NATOA=none NATD=none DPD=passive}
 west #
  ipsec auto --down ikev2-westnet-eastnet-x509-cr
 002 "ikev2-westnet-eastnet-x509-cr": terminating SAs using this connection
+002 "ikev2-westnet-eastnet-x509-cr" #12: deleting state (STATE_V2_IPSEC_I) and sending notification
 005 "ikev2-westnet-eastnet-x509-cr" #12: ESP traffic information: in=0B out=0B
+002 "ikev2-westnet-eastnet-x509-cr" #11: deleting state (STATE_PARENT_I3) and sending notification
 west #
  echo "done"
 done
@@ -178,13 +189,12 @@ default via 192.1.2.254 dev eth1
 192.0.1.0/24 dev eth0 proto kernel scope link src 192.0.1.254
 192.0.2.0/24 dev eth1 scope link src 192.0.1.254
 192.1.2.0/24 dev eth1 proto kernel scope link src 192.1.2.45
-192.9.4.0/24 dev eth2 proto kernel scope link src 192.9.4.45
 NSS_CERTIFICATES
 Certificate Nickname                                         Trust Attributes
                                                              SSL,S/MIME,JAR/XPI
 Libreswan test CA for mainca - Libreswan                     CT,, 
 east-ec                                                      P,,  
-hashsha2                                                     P,,  
+hashsha1                                                     P,,  
 nic                                                          P,,  
 north                                                        P,,  
 road                                                         P,,  

@@ -1,6 +1,7 @@
 /* demultiplex incoming IKE messages
  * Copyright (C) 1997 Angelos D. Keromytis.
  * Copyright (C) 1998-2002  D. Hugh Redelmeier.
+ * Copyright (C) 2019 Andrew Cagney <cagney@gnu.org>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -33,7 +34,6 @@
 #  include <sys/uio.h>          /* struct iovec */
 #endif
 
-#include <libreswan.h>
 
 #include "sysdep.h"
 #include "constants.h"
@@ -94,7 +94,8 @@ struct msg_digest *alloc_md(const char *mdname)
 struct msg_digest *clone_md(struct msg_digest *md, const char *name)
 {
 	struct msg_digest *clone = alloc_md(name);
-	clone->fake = true;
+	clone->fake_clone = true;
+	clone->md_inception = threadtime_start();
 	/* raw_packet */
 	clone->iface = md->iface; /* copy reference */
 	clone->sender = md->sender; /* copy value */

@@ -1,8 +1,9 @@
 /* monotonic time, for libreswan
  *
- * Copyright (C) 1998-2001  D. Hugh Redelmeier.
- * Copyright (C) 2014  D. Hugh Redelmeier.
- * Copyright (C) 2015  Paul Wouters
+ * Copyright (C) 1998-2001  D. Hugh Redelmeier. <hugh@mimosa.com>
+ * Copyright (C) 2014  D. Hugh Redelmeier. <hugh@mimosa.com>
+ * Copyright (C) 2015 Paul Wouters <pwouters@redhat.com>
+ * Copyright (C) 2019 Andrew Cagney <cagney@gnu.org>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -21,6 +22,11 @@
 #include "lswlog.h"	/* for libreswan_exit_log_errno() */
 
 #include "monotime.h"
+
+monotime_t monotime(intmax_t seconds)
+{
+	return (monotime_t) { .mt = { .tv_sec = seconds, }, };
+}
 
 const monotime_t monotime_epoch = MONOTIME_EPOCH;
 
@@ -85,7 +91,5 @@ bool monobefore(monotime_t a, monotime_t b)
 
 deltatime_t monotimediff(monotime_t a, monotime_t b)
 {
-	struct timeval d;
-	timersub(&a.mt, &b.mt, &d);
-	return deltatime_ms((intmax_t)d.tv_sec * 1000 + d.tv_usec / 1000);
+	return deltatime_timevals_diff(a.mt, b.mt);
 }

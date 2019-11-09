@@ -1,6 +1,6 @@
 /* debug set constants, for libreswan
  *
- * Copyright (C) 2017 Andrew Cagney
+ * Copyright (C) 2017-2019 Andrew Cagney <cagney@gnu.org>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -18,6 +18,7 @@
 #include "constants.h"
 #include "enum_names.h"
 #include "lmod.h"
+#include "lswcdefs.h"		/* for ARRAY_REF() */
 
 /*
  * Initialize both the .name and .help arrays.

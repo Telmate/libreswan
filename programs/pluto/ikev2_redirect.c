@@ -2,6 +2,7 @@
  * IKEv2 Redirect Mechanism (RFC 5685) related functions
  *
  * Copyright (C) 2018 Vukasin Karadzic <vukasin.karadzic@gmail.com>
+ * Copyright (C) 2019 D. Hugh Redelmeier <hugh@mimosa.com>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -16,7 +17,6 @@
 
 #include <unistd.h>
 
-#include <libreswan.h>
 
 #include "lswlog.h"
 #include "constants.h"
@@ -32,11 +32,8 @@
 #include "ikev2.h"
 #include "ikev2_send.h"
 #include "kernel.h"		/* needed for del_spi */
-
+#include "ip_info.h"
 #include "ikev2_redirect.h"
-
-/* two bytes for GW Ident Type and GW Ident Len */
-#define GW_PAYLOAD_INFO_SIZE 2
 
 /*
  * Structure of REDIRECT Notify payload from RFC 5685.
@@ -64,239 +61,198 @@
  * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
  */
 
-err_t build_redirect_notify_data(char *destination,
-				 bool global_red,
-				 chunk_t *nonce,
-				 chunk_t *data)
+bool emit_redirect_notification(
+		const char *destination,
+		const chunk_t *nonce, /* optional */
+		pb_stream *pbs)
 {
 	ip_address ip_addr;
-	uint8_t redir_gw_type = 0, gw_identity_len = 0;	/* exactly one byte as per RFC */
-	size_t data_len = 0;
-	unsigned char *tmp = NULL;
-	err_t ugh = NULL;
+	err_t ugh = ttoaddr_num(destination, 0, AF_UNSPEC, &ip_addr);
 
-	passert(destination != NULL);
-
-	/*
-	 * try ttoaddr_num, if it fails just
-	 * ship destination (as a FQDN, although
-	 * it may be a bogus string)
-	 */
-	ugh = ttoaddr_num(destination, 0, AF_UNSPEC, &ip_addr);
 	if (ugh != NULL) {
-		DBG(DBG_CONTROL, DBG_log("REDIRECT destination is not IPv4/IPv6 address, we are going to send it as FQDN"));
-		redir_gw_type = GW_FQDN;
-		gw_identity_len = strlen(destination);
+		/*
+		 * ttoaddr_num failed: just ship destination as a FQDN
+		 * ??? it may be a bogus string
+		 */
+		return emit_redirect_notification_decoded_dest(v2N_REDIRECT,
+			NULL, destination, nonce, pbs);
 	} else {
-		switch (addrtypeof(&ip_addr)) {
+		return emit_redirect_notification_decoded_dest(v2N_REDIRECT,
+			&ip_addr, NULL, nonce, pbs);
+	}
+}
+
+bool emit_redirect_notification_decoded_dest(
+		v2_notification_t ntype,
+		const ip_address *dest_ip,
+		const char *dest_str,
+		const chunk_t *nonce, /* optional */
+		pb_stream *pbs)
+{
+	struct ikev2_redirect_part gwi;
+	shunk_t id;
+
+	if (dest_ip == NULL) {
+		id = shunk1(dest_str);
+		gwi.gw_identity_type = GW_FQDN;
+	} else {
+		passert(dest_str == NULL);
+
+		switch (addrtypeof(dest_ip)) {
 		case AF_INET:
-			redir_gw_type = GW_IPV4;
-			gw_identity_len = 4;
+			gwi.gw_identity_type = GW_IPV4;
 			break;
 		case AF_INET6:
-			redir_gw_type = GW_IPV6;
-			gw_identity_len = 16;
+			gwi.gw_identity_type = GW_IPV6;
 			break;
 		default:
-			break;
+			bad_case(addrtypeof(dest_ip));
 		}
+		id = address_as_shunk(dest_ip);
 	}
 
-	data_len = GW_PAYLOAD_INFO_SIZE + gw_identity_len + (global_red == TRUE ? nonce->len : 0);
-	*data = alloc_chunk(data_len, "data for REDIRECT Notify payload");	/* we free this in calling function
-										   or here (when len != gw_identity_len) */
-	tmp = data->ptr;
-	*tmp++ = redir_gw_type;
-	*tmp++ = gw_identity_len;
-
-	if (redir_gw_type == GW_FQDN) {
-		/* write string - FQDN - to tmp (chunk_t data) */
-		memcpy(tmp, destination, gw_identity_len);
-		tmp += gw_identity_len;
-	} else {
-		/* write values of IPv4/IPv6 address */
-		unsigned char *addr_bytes;
-		size_t len = addrbytesptr_write(&ip_addr, &addr_bytes);
-		if (len != gw_identity_len) {
-			freeanychunk(*data);
-			return "GW identity length doesn't match address bytes length";
-		}
-		/* write ip_address bytes to tmp (chunk_t data) */
-		memcpy(tmp, addr_bytes, len);
-		tmp += len;
+	if (id.len > 0xFF) {
+		/* ??? what should we do? */
+		loglog(RC_LOG_SERIOUS, "redirect destination longer than 255 octets; ignoring");
+		return false;
 	}
+	gwi.gw_identity_len = id.len;
 
-	if (global_red) {
-		memcpy(tmp, nonce->ptr, nonce->len);
-		tmp += nonce->len;
-	}
+	passert(nonce == NULL ||
+		(nonce->len >= IKEv2_MINIMUM_NONCE_SIZE &&
+		 nonce->len <= IKEv2_MAXIMUM_NONCE_SIZE));
 
-	return NULL;
+	pb_stream gwid_pbs;
+	return
+		emit_v2Npl(ntype, pbs, &gwid_pbs) &&
+		out_struct(&gwi, &ikev2_redirect_desc, &gwid_pbs, NULL) &&
+		out_raw(id.ptr, id.len , &gwid_pbs, "redirect ID") &&
+		(nonce == NULL || out_chunk(*nonce, &gwid_pbs, "redirect ID len")) &&
+		(close_output_pbs(&gwid_pbs), true);
 }
 
 /*
- * Itterate through the allowed_targets_list, and if none of the
+ * Iterate through the allowed_targets_list, and if none of the
  * specified addresses matches the one from REDIRECT
  * payload, return FALSE
  */
-static bool allow_to_be_redirected(char *allowed_targets_list, ip_address *dest_ip)
+static bool allow_to_be_redirected(const char *allowed_targets_list, ip_address *dest_ip)
 {
 	if (allowed_targets_list == NULL || streq(allowed_targets_list, "%any"))
 		return TRUE;
 
-	char *tok;
 	ip_address ip_addr;
-	err_t ugh;
 
-	tok = strtok(allowed_targets_list, ", ");
-	while (tok != NULL) {
-		if (strchr(tok, ':') != NULL)
-			ugh = ttoaddr_num(tok, 0, AF_INET6, &ip_addr);
-		else
-			/* IPv4 and FQDN are left as possible options,
-			 * try with AF_UNSPECIFIED, ttoaddr should do the rest */
-			ugh = ttoaddr(tok, 0, AF_UNSPEC, &ip_addr);
+	for (const char *t = allowed_targets_list;; ) {
+		t += strspn(t, ", ");	/* skip leading separator */
+		int len = strcspn(t, ", ");	/* length of name */
+		if (len == 0)
+			break;	/* no more */
+
+		err_t ugh = ttoaddr_num(t, len, AF_UNSPEC, &ip_addr);
 
 		if (ugh != NULL) {
-			DBG(DBG_CONTROLMORE, DBG_log("address %s isn't a valid address", tok));
+			DBGF(DBG_CONTROLMORE, "address %.*s isn't a valid address", len, t);
+		} else if (sameaddr(dest_ip, &ip_addr)) {
+			DBGF(DBG_CONTROLMORE,
+				"address %.*s is a match to received GW identity", len, t);
+			return TRUE;
 		} else {
-			if (sameaddr(dest_ip, &ip_addr)) {
-				DBG(DBG_CONTROLMORE,
-				    DBG_log("address %s is a match to received GW identity", tok));
-				return TRUE;
-			} else {
-				DBG(DBG_CONTROLMORE,
-				    DBG_log("address %s is not a match to received GW identity", tok));
-			}
+			DBGF(DBG_CONTROLMORE,
+				"address %.*s is not a match to received GW identity", len, t);
 		}
-		tok = strtok(NULL, ", ");
+		t += len;	/* skip name */
 	}
-	DBG(DBG_CONTROLMORE,
-	    DBG_log("we did not find suitable address in the list specified by accept-redirect-to option"));
+	DBGF(DBG_CONTROLMORE,
+		"we did not find suitable address in the list specified by accept-redirect-to option");
 	return FALSE;
 }
 
 err_t parse_redirect_payload(pb_stream *input_pbs,
-			     char *allowed_targets_list,
-			     bool global_red,
-			     chunk_t *nonce,
-			     ip_address *redirect_ip)
+			     const char *allowed_targets_list,
+			     const chunk_t *nonce,
+			     ip_address *redirect_ip /* result */)
 {
 	struct ikev2_redirect_part gw_info;
-	chunk_t gw_identity;
-	int af = AF_UNSPEC;
-	err_t ugh = NULL;
 
 	if (!in_struct(&gw_info, &ikev2_redirect_desc, input_pbs, NULL))
 		return "received deformed REDIRECT payload";
 
+	const struct ip_info *af;
+
 	switch (gw_info.gw_identity_type) {
 	case GW_IPV4:
-		af = AF_INET;
+		af = &ipv4_info;
 		break;
 	case GW_IPV6:
-		af = AF_INET6;
+		af = &ipv6_info;
 		break;
 	case GW_FQDN:
+		af  = NULL;
 		break;
 	default:
 		return "bad GW Ident Type";
 	}
 
 	/* in_raw() actual GW Identity */
-	if (af != AF_INET && af != AF_INET6) {
-		if (!in_raw(&gw_identity.ptr, gw_info.gw_identity_len, input_pbs, "GW Identity"))
+	if (af == NULL) {
+		/*
+		 * The FQDN string isn't NUL-terminated.
+		 *
+		 * The length is stored in a byte so it cannot be
+		 * larger than 0xFF.
+		 * Some helpful compilers moan about this test being always true
+		 * so I eliminated it:
+		 *	passert(gw_info.gw_identity_len <= 0xFF);
+		 */
+		unsigned char gw_str[0xFF];
+
+		if (!in_raw(&gw_str, gw_info.gw_identity_len, input_pbs, "GW Identity"))
 			return "error while extracting GW Identity from variable part of IKEv2_REDIRECT Notify payload";
 
-		ugh = ttoaddr((char *) gw_identity.ptr, 0, AF_UNSPEC, redirect_ip);
+		err_t ugh = ttoaddr((char *) gw_str, gw_info.gw_identity_len,
+					AF_UNSPEC, redirect_ip);
 		if (ugh != NULL) {
 			return ugh;
 		}
 	} else {
-		/* GW is either IPv4 or IPv6 */
-		if (pbs_left(input_pbs) < gw_info.gw_identity_len)
-			return "variable part of payload is smaller than transfered GW Identity Length";
-
-		/* parse address directly to redirect_ip */
-		ugh = initaddr(input_pbs->cur, gw_info.gw_identity_len, af, redirect_ip);
-		if (ugh != NULL)
-			return ugh;
-
-		input_pbs->cur += gw_info.gw_identity_len;
+		if (gw_info.gw_identity_len < af->ip_size) {
+			return "transferred GW Identity Length is too small for an IP address";
+		}
+		if (!pbs_in_address(redirect_ip, af, input_pbs, "REDIRECT address")) {
+			return "variable part of payload does not match transferred GW Identity Length";
+		}
+		address_buf b;
+		dbg("   GW Identity IP: %s", ipstr(redirect_ip, &b));
 	}
 
-	/* now check the list of allowed targets to
-	 * see if parsed address matches any in the list */
+	/*
+	 * now check the list of allowed targets to
+	 * see if parsed address matches any in the list
+	 */
 	if (!allow_to_be_redirected(allowed_targets_list, redirect_ip))
 		return "received GW Identity is not listed in accept-redirect-to conn option";
 
 	size_t len = pbs_left(input_pbs);
 
-	DBG(DBG_CONTROLMORE,
-	    DBG_log("there are %zu bytes left to parse, and we do%s need to parse nonce",
-		     len, global_red ? "" : " NOT"));
-
-	if (global_red) {
+	if (nonce == NULL) {
+		if (len > 0)
+			return "unexpected extra bytes in Notify data";
+	} else {
 		if (len < IKEv2_MINIMUM_NONCE_SIZE)
 			return "expected nonce is smaller than IKEv2 minimum nonce size";
 		else if (len > IKEv2_MAXIMUM_NONCE_SIZE)
 			return "expected nonce is bigger than IKEv2 maximum nonce size";
 
-		if (!memeq(nonce->ptr, input_pbs->cur, len)) {
-			chunk_t dump_nonce;
-
-			setchunk(dump_nonce, input_pbs->cur, len);
-			DBG(DBG_CONTROL, DBG_dump_chunk("received nonce", dump_nonce));
+		if (nonce->len != len ||
+		    !memeq(nonce->ptr, input_pbs->cur, len)) {
+			DBG(DBG_CONTROL, {
+				DBG_dump_hunk("expected nonce", *nonce);
+				DBG_dump("received nonce", input_pbs->cur, len);
+			});
 			return "received nonce is not the same as Ni";
 		}
-	} else {
-		if (len > 0)
-			return "there exists extra (unexpected) bytes in Notify data";
 	}
-
-	return NULL;
-}
-
-err_t build_redirected_from_notify_data(ip_address old_gw_address, chunk_t *data)
-{
-	int gw_identity_type = 0;
-	size_t gw_identity_len = 0;
-
-	switch (addrtypeof(&old_gw_address)) {
-	case AF_INET:
-		gw_identity_type = GW_IPV4;
-		gw_identity_len = 4;
-		break;
-	case AF_INET6:
-		gw_identity_type = GW_IPV6;
-		gw_identity_len = 16;
-		break;
-	default:
-		return "address of the gateway that redirected us is deformed";
-	}
-
-	size_t data_len = GW_PAYLOAD_INFO_SIZE + gw_identity_len;
-	/*
-	 * we free this data in calling function or here
-	 * (when len != gw_identity_len)
-	 */
-	*data = alloc_chunk(data_len, "data for REDIRECTED_FROM Notify payload");
-
-	char *tmp = (char *) data->ptr;
-	*tmp++ = gw_identity_type;
-	*tmp++ = gw_identity_len;
-
-	/* write values of IPv4/IPv6 address */
-	const unsigned char *addr_bytes;
-	size_t len = addrbytesptr_read(&old_gw_address, &addr_bytes);
-
-	if (len != gw_identity_len) {
-		freeanychunk(*data);
-		return "old GW identity length doesn't match address bytes length";
-	}
-
-	/* write ip_address bytes to tmp (chunk_t data) */
-	memcpy(tmp, addr_bytes, len);
 
 	return NULL;
 }
@@ -330,7 +286,8 @@ void initiate_redirect(struct state *st)
 	ipstr_buf b;
 	struct state *right_state;
 
-	if (IS_PARENT_SA(st))
+	/* XXX: just use ike_sa(st) */
+	if (IS_IKE_SA(st))
 		right_state = st;
 	else
 		right_state = state_with_serialno(st->st_clonedfrom);
@@ -386,39 +343,33 @@ void initiate_redirect(struct state *st)
 	 */
 	if (st->st_redirected_in_auth)
 		del_spi_trick(st);
-
-	return;
 }
 
 /* helper function for send_v2_informational_request() */
-static stf_status add_redirect_payload(struct state *st, pb_stream *pbs)
+static payload_master_t add_redirect_payload;
+static bool add_redirect_payload(struct state *st, pb_stream *pbs)
 {
-	chunk_t notify_data;
-
-	err_t e = build_redirect_notify_data(st->st_active_redirect_gw, FALSE,
-						NULL, &notify_data);
-	if (e != NULL) {
-		loglog(RC_LOG_SERIOUS, "build of REDIRECT Payload failed: %s", e);
-		return STF_INTERNAL_ERROR;
-	}
-
-	if (!out_v2Nchunk(v2N_REDIRECT, &notify_data, pbs)) {
-		freeanychunk(notify_data);
-		return STF_INTERNAL_ERROR;
-	}
-
-	freeanychunk(notify_data);
-	return STF_OK;
+	return emit_redirect_notification(st->st_active_redirect_gw, NULL, pbs);
 }
 
 void send_active_redirect_in_informational(struct state *st)
 {
-	stf_status e = send_v2_informational_request("active REDIRECT informational request",
-					st, ike_sa(st), add_redirect_payload);
+	struct ike_sa *ike = ike_sa(st);
+	stf_status e = record_v2_informational_request("active REDIRECT informational request",
+						       ike, st, add_redirect_payload);
 	if (e == STF_OK) {
+		send_recorded_v2_ike_msg(st, "active REDIRECT informational request");
+		/*
+		 * XXX: record 'n' send violates the RFC.  This code
+		 * should instead let success_v2_state_transition()
+		 * deal with things.
+		 */
+		dbg_v2_msgid(ike, st, "XXX: in %s hacking around record'n'send bypassing send queue",
+			     __func__);
+		v2_msgid_update_sent(ike, &ike->sa, NULL /* new exchange */, MESSAGE_REQUEST);
 		ipstr_buf b;
 		libreswan_log("redirecting of peer %s successful",
-				sensitive_ipstr(&st->st_remoteaddr, &b));
+				sensitive_ipstr(&st->st_remote_endpoint, &b));
 	} else {
 		libreswan_log("redirect not successful");
 	}

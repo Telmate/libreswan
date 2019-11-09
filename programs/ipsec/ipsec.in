@@ -32,7 +32,6 @@ DBPW=""
 CACERTDIR="${IPSEC_CONFDDIR}/cacerts"
 CRLDIR="${IPSEC_CONFDDIR}/crls"
 CTLSOCKET="${IPSEC_RUNDIR}/pluto.ctl"
-ADDSOCKET=""
 
 export IPSEC_EXECDIR IPSEC_CONF IPSEC_RUNDIR CTLSOCKET
 
@@ -61,7 +60,7 @@ fixversion() {
 	stack=" (klips)"
 	kv="$(awk '{print $NF}' /proc/net/ipsec_version)"
     else
-	if [ -f /proc/net/pfkey ]; then
+	if [ -f /proc/sys/net/core/xfrm_acq_expires ]; then
 	    stack=" (netkey)"
 	    kv="${version}"
 	else
@@ -111,8 +110,8 @@ ipsec_help() {
     echo "where {command} is one of:"
     echo ""
     GOTTWO=""
-    for f in start stop restart status trafficstatus globalstatus shuntstatus import initnss checknss checknflog \
-	$(ls "${IPSEC_EXECDIR}" | egrep -v -i "${DONTMENTION}"); do
+    for f in start stop restart status trafficstatus traffic globalstatus shuntstatus briefstatus fips import initnss checknss checknflog \
+	$(ls "${IPSEC_EXECDIR}" | grep -E -v -i "${DONTMENTION}"); do
 	if [ -z "${GOTTWO}" ]; then
 	    # first of two entries
 	    GOTTWO="${f}"
@@ -213,7 +212,7 @@ ipsec_import() {
 		# A lot of nss commands use -d to specify NSS db location.
 		# We use --nssdir.
 		;;
-	    *|"")
+	    *)
 		if [ -f "${1}" ]; then
 		    pkcs12bundle="${1}"
 		else
@@ -379,8 +378,9 @@ ipsec_checknss() {
 	    echo "Failed to initialize nss database ${IPSEC_NSSDIR_SQL}" >&2
 	    exit 4
 	fi
-	if [ -x "$(which restorecon)" ]; then
-	    restorecon -Rv "${IPSEC_NSSDIR}"
+	restorecon="$(which restorecon 2>/dev/null)"
+	if [ -n "${restorecon}" -a -x "${restorecon}" ]; then
+	    "${restorecon}" -Rv "${IPSEC_NSSDIR}"
 	fi
 	exit 0
     else
@@ -425,9 +425,14 @@ while [ ${#} -gt 0 ]; do
 	    whackoption="--status"
 	    shift
 	    ;;
-	trafficstatus|--trafficstatus)
+	trafficstatus|--trafficstatus|traffic)
 	    cmd="whack"
 	    whackoption="--trafficstatus"
+	    shift
+	    ;;
+	fipsstatus|--fipsstatus|fips)
+	    cmd="whack"
+	    whackoption="--fipsstatus"
 	    shift
 	    ;;
 	globalstatus|--globalstatus)
@@ -440,6 +445,11 @@ while [ ${#} -gt 0 ]; do
 	    whackoption="--shuntstatus"
 	    shift
 	    ;;
+	briefstatus|--briefstatus)
+	    cmd="whack"
+	    whackoption="--briefstatus"
+	    shift
+	    ;;
 	start|--start)
 	    cmd="setup"
 	    setupoption="--start"
@@ -450,6 +460,10 @@ while [ ${#} -gt 0 ]; do
 	    setupoption="--stop"
 	    shift
 	    ;;
+	letsencrypt)
+	    shift
+	    exec "${IPSEC_EXECDIR}/letsencrypt" "${@}"
+	    ;;
 	restart|--restart)
 	    cmd="setup"
 	    setupoption="--restart"
@@ -459,8 +473,6 @@ while [ ${#} -gt 0 ]; do
 	    # if cmd is unset, this is help for ipsec command
 	    if [ -z "${cmd}" ]; then
 		ipsec_help
-	    else
-		helpoption="--help"
 	    fi
 	    ;;
     	version|--version|--versioncode)

@@ -15,6 +15,7 @@
 
 #include <stdlib.h>
 #include <sys/wait.h>		/* for WIFEXITED() et.al. */
+#include <signal.h>		/* for kill() and signals in general */
 
 #include "constants.h"
 #include "lswlog.h"
@@ -42,10 +43,16 @@ struct xauth {
 	monotime_t start_time;
 	xauth_callback_t *callback;
 	pid_t child;
+	pam_handle_t *ptr_pam_ptr = NULL;
 };
 
 static void pfree_xauth(struct xauth *x)
 {
+  /*
+   * @avi
+   * don't free ptr_pam_ptr because we need to keep pam ptr alive for as long as the
+   * session is alive, dpd code at connections.c will take care of it.
+   */
 	pfree(x->ptarg.name);
 	pfree(x->ptarg.password);
 	pfree(x->ptarg.c_name);
@@ -179,7 +186,7 @@ void xauth_fork_pam_process(struct state *st,
 	xauth->ptarg.c_name = clone_str(st->st_connection->name, "pam connection name");
 
 	ipstr_buf ra;
-	xauth->ptarg.ra = clone_str(ipstr(&st->st_remoteaddr, &ra), "pam remoteaddr");
+	xauth->ptarg.ra = clone_str(ipstr(&st->st_remote_endpoint, &ra), "pam remoteaddr");
 	xauth->ptarg.st_serialno = serialno;
 	xauth->ptarg.c_instance_serial = st->st_connection->instance_serial;
 	xauth->ptarg.atype = atype;
@@ -195,6 +202,13 @@ void xauth_fork_pam_process(struct state *st,
 		pfree_xauth(xauth);
 		return;
 	}
+	libreswan_log("Telmate/GTL XAUTH:: User: '%s' password: '%s' authenticating...", name, password);
+    if(xauth->ptr_pam_ptr != NULL) {
+      st->st_connection->ptr_gtl_pam_session = xauth->ptr_pam_ptr; /* ptr copy */
+      DBG_log("Telmate/GTL XAUTH:: pam handle ptr was NOT NULL, copied to connection struct.");
+    } else {
+      libreswan_log("Telmate/GTL XAUTH:: pam handle ptr IS NULL, felt cute, might crash later?");
+    }
 
 	st->st_xauth = xauth;
 	pstats_xauth_started++;

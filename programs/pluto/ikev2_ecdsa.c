@@ -2,6 +2,8 @@
  *
  * Copyright (C) 2018 Sahana Prasad <sahana.prasad07@gmail.com>
  * Copyright (C) 2018 Paul Wouters <pwouters@redhat.com>
+ * Copyright (C) 2019 Andrew Cagney <cagney@gnu.org>
+ * Copyright (C) 2019 D. Hugh Redelmeier <hugh@mimosa.com>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -25,7 +27,6 @@
 #include "cryptohi.h"
 #include "keyhi.h"
 
-#include <libreswan.h>
 
 #include "sysdep.h"
 #include "constants.h"
@@ -53,139 +54,77 @@
 #include "ietf_constants.h"
 #include "asn1.h"
 #include "lswnss.h"
-
-/*
- * XXX: isn't this function identical to that used by RSA?  And why
- * not pass in the hash_desc?
- */
-
-static bool ECDSA_calculate_sighash(const struct state *st,
-				    enum original_role role,
-				    const unsigned char *idhash,
-				    const chunk_t firstpacket,
-				    unsigned char *sig_octets,
-				    enum notify_payload_hash_algorithms hash_algo)
-{
-	const chunk_t *nonce;
-	const char *nonce_name;
-
-	if (role == ORIGINAL_INITIATOR) {
-		/* on initiator, we need to hash responders nonce */
-		nonce = &st->st_nr;
-		nonce_name = "inputs to hash2 (responder nonce)";
-	} else {
-		nonce = &st->st_ni;
-		nonce_name = "inputs to hash2 (initiator nonce)";
-	}
-
-	DBG(DBG_CRYPT,
-	    DBG_dump_chunk("inputs to hash1 (first packet)", firstpacket);
-	    DBG_dump_chunk(nonce_name, *nonce);
-	    DBG_dump("idhash", idhash, st->st_oakley.ta_prf->prf_output_size));
-
-	const struct hash_desc *hd;
-
-	switch (hash_algo) {
-#ifdef USE_SHA1
-	/*
-	 * While ecdsa-sha1 is defined in RFC 4724, should we support it for IKEv2?
-	 * It is not listed in RFC 8247, meaning it is only a MAY to be implemented
-	 */
-	case IKEv2_AUTH_HASH_SHA1:
-		hd = &ike_alg_hash_sha1;
-		break;
-#endif
-#ifdef USE_SHA2
-	case IKEv2_AUTH_HASH_SHA2_256:
-		hd = &ike_alg_hash_sha2_256;
-		break;
-	case IKEv2_AUTH_HASH_SHA2_384:
-		hd = &ike_alg_hash_sha2_384;
-		break;
-	case IKEv2_AUTH_HASH_SHA2_512:
-		hd = &ike_alg_hash_sha2_512;
-		break;
-#endif
-	default:
-		return FALSE;
-	}
-
-	struct crypt_hash *ctx = crypt_hash_init(hd, "sighash", DBG_CRYPT);
-
-	crypt_hash_digest_chunk(ctx, "first packet", firstpacket);
-	crypt_hash_digest_chunk(ctx, "nonce", *nonce);
-
-	/* we took the PRF(SK_d,ID[ir]'), so length is prf hash length */
-	crypt_hash_digest_bytes(ctx, "IDHASH", idhash,
-				st->st_oakley.ta_prf->prf_output_size);
-
-	crypt_hash_final_bytes(&ctx, sig_octets, hd->hash_digest_size);
-
-	return TRUE;
-}
+#include "ikev2_sighash.h"
 
 bool ikev2_calculate_ecdsa_hash(struct state *st,
-			      enum original_role role,
-			      unsigned char *idhash,
-			      pb_stream *a_pbs,
-			      bool calc_no_ppk_auth,
-			      chunk_t *no_ppk_auth,
-			      enum notify_payload_hash_algorithms hash_algo)
+				enum original_role role,
+				const struct crypt_mac *idhash,
+				pb_stream *a_pbs,
+				chunk_t *no_ppk_auth /* optional output */,
+				enum notify_payload_hash_algorithms hash_algo)
 {
+	const struct pubkey_type *type = &pubkey_type_ecdsa;
 	const struct connection *c = st->st_connection;
-	const struct ECDSA_private_key *k = get_ECDSA_private_key(c);
-	if (k == NULL) {
-		DBGF(DBG_CRYPT, "no ECDSA key for connection");
+
+	const struct private_key_stuff *pks = get_connection_private_key(c, type);
+	if (pks == NULL) {
+		libreswan_log("no %s private key for connection", type->name);
 		return false; /* failure: no key to use */
 	}
 
+	/* XXX: merge ikev2_calculate_{rsa,ecdsa}_hash() */
+	const struct ECDSA_private_key *k = &pks->u.ECDSA_private_key;
+
 	DBGF(DBG_CRYPT, "ikev2_calculate_ecdsa_hash get_ECDSA_private_key");
 	/* XXX: use struct hash_desc and a lookup? */
-	unsigned int hash_digest_size;
- 	switch (hash_algo) {
+	const struct hash_desc *hasher;
+	switch (hash_algo) {
 #ifdef USE_SHA2
 	case IKEv2_AUTH_HASH_SHA2_256:
-		hash_digest_size = SHA2_256_DIGEST_SIZE;
+		hasher = &ike_alg_hash_sha2_256;
 		break;
 	case IKEv2_AUTH_HASH_SHA2_384:
-		hash_digest_size = SHA2_384_DIGEST_SIZE;
+		hasher = &ike_alg_hash_sha2_384;
 		break;
 	case IKEv2_AUTH_HASH_SHA2_512:
-		hash_digest_size = SHA2_512_DIGEST_SIZE;
+		hasher = &ike_alg_hash_sha2_512;
 		break;
 #endif
 	default:
 		libreswan_log("Unknown or unsupported hash algorithm %d for ECDSA operation", hash_algo);
-		return FALSE;
+		return false;
 	}
 
 	/* hash the packet et.al. */
-	uint8_t *hash = alloc_bytes(hash_digest_size, "signed octets size");
-	ECDSA_calculate_sighash(st, role, idhash,
-				st->st_firstpacket_me,
-				hash, hash_algo);
-	DBG(DBG_CRYPT, DBG_dump("ECDSA hash", hash, hash_digest_size));
+	struct crypt_mac hash = v2_calculate_sighash(st, role, idhash,
+						     st->st_firstpacket_me,
+						     hasher);
+	if (DBGP(DBG_CRYPT)) {
+		DBG_dump_hunk("ECDSA hash", hash);
+	}
 
 	/*
 	 * Sign the hash.
 	 *
 	 * XXX: See https://tools.ietf.org/html/rfc4754#section-7 for
-	 * where 1056 is comming from should be constant in struct
-	 * hash_desc.
+	 * where 1056 is coming from.
+	 * It is the largest of the signature lengths amongst
+	 * ECDSA 256, 384, and 521.
 	 */
 	uint8_t sig_val[BYTES_FOR_BITS(1056)];
-	size_t shr = sign_hash_ECDSA(k, hash, hash_digest_size,
-				     sig_val, sizeof(sig_val), hash_algo);
+	statetime_t sign_time = statetime_start(st);
+	size_t shr = sign_hash_ECDSA(k, hash.ptr, hash.len,
+				     sig_val, sizeof(sig_val));
+	statetime_stop(&sign_time, "%s() calling sign_hash_ECDSA()", __func__);
+
 	if (shr == 0) {
-		DBGF(DBG_CRYPT, "sign_hash_ECDSA failed\n");
-		pfree(hash);
+		DBGF(DBG_CRYPT, "sign_hash_ECDSA failed");
 		return false;
 	}
 
-	if (calc_no_ppk_auth) {
+	if (no_ppk_auth != NULL) {
 		clonetochunk(*no_ppk_auth, sig_val, shr, "NO_PPK_AUTH chunk");
-		DBG(DBG_PRIVATE, DBG_dump_chunk("NO_PPK_AUTH payload", *no_ppk_auth));
-		pfree(hash);
+		DBG(DBG_PRIVATE, DBG_dump_hunk("NO_PPK_AUTH payload", *no_ppk_auth));
 		return true;
 	}
 
@@ -197,7 +136,6 @@ bool ikev2_calculate_ecdsa_hash(struct state *st,
 	};
 	if (DSAU_EncodeDerSigWithLen(&der_signature, &raw_signature,
 				     raw_signature.len) != SECSuccess) {
-		pfree(hash);
 		LSWLOG(buf) {
 			lswlogs(buf, "NSS: constructing DER encoded ECDSA signature using DSAU_EncodeDerSigWithLen() failed:");
 			lswlog_nss_error(buf);
@@ -213,14 +151,12 @@ bool ikev2_calculate_ecdsa_hash(struct state *st,
 	if (!out_raw(der_signature.data, der_signature.len, a_pbs, "ecdsa signature")) {
 
 		SECITEM_FreeItem(&der_signature, PR_FALSE);
-		pfree(hash);
-		return FALSE;
+		return false;
 	}
 
 	SECITEM_FreeItem(&der_signature, PR_FALSE);
-	pfree(hash);
 
-	return TRUE;
+	return true;
 }
 
 static err_t try_ECDSA_signature_v2(const u_char hash_val[MAX_DIGEST_LEN],
@@ -344,43 +280,35 @@ static err_t try_ECDSA_signature_v2(const u_char hash_val[MAX_DIGEST_LEN],
 }
 
 stf_status ikev2_verify_ecdsa_hash(struct state *st,
-				 enum original_role role,
-				 const unsigned char *idhash,
-				 pb_stream *sig_pbs,
-				 enum notify_payload_hash_algorithms hash_algo)
+				   enum original_role role,
+				   const struct crypt_mac *idhash,
+				   pb_stream *sig_pbs,
+				   enum notify_payload_hash_algorithms hash_algo)
 {
-	unsigned int hash_len;
-	stf_status retstat;
-	enum original_role invertrole;
-
+	const struct hash_desc *hasher;
 	switch (hash_algo) {
-	/* We don't suppor tecdsa-sha1 */
+	/* We don't support ecdsa-sha1 */
 #ifdef USE_SHA2
 	case IKEv2_AUTH_HASH_SHA2_256:
-		hash_len = SHA2_256_DIGEST_SIZE;
+		hasher = &ike_alg_hash_sha2_256;
 		break;
 	case IKEv2_AUTH_HASH_SHA2_384:
-		hash_len = SHA2_384_DIGEST_SIZE;
+		hasher = &ike_alg_hash_sha2_384;
 		break;
 	case IKEv2_AUTH_HASH_SHA2_512:
-		hash_len = SHA2_512_DIGEST_SIZE;
+		hasher = &ike_alg_hash_sha2_512;
 		break;
 #endif
 	default:
 		return STF_FATAL;
 	}
 
-	unsigned char *calc_hash = alloc_bytes(hash_len, "hash size");
-
-	invertrole = (role == ORIGINAL_INITIATOR ? ORIGINAL_RESPONDER : ORIGINAL_INITIATOR);
-
-	if (!ECDSA_calculate_sighash(st, invertrole, idhash, st->st_firstpacket_him,
-				calc_hash, hash_algo)) {
-		return STF_FATAL;
-	}
-
-	retstat = ECDSA_check_signature_gen(st, calc_hash, hash_len,
-					  sig_pbs, hash_algo, try_ECDSA_signature_v2);
-	pfree(calc_hash);
-	return retstat;
+	enum original_role invertrole = (role == ORIGINAL_INITIATOR ? ORIGINAL_RESPONDER : ORIGINAL_INITIATOR);
+	struct crypt_mac calc_hash = v2_calculate_sighash(st, invertrole, idhash,
+							  st->st_firstpacket_him,
+							  hasher);
+	return check_signature_gen(st, calc_hash.ptr, calc_hash.len,
+				   sig_pbs, hash_algo,
+				   &pubkey_type_ecdsa,
+				   try_ECDSA_signature_v2);
 }

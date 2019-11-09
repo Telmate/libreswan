@@ -1,10 +1,7 @@
 /testing/guestbin/swan-prep
 west #
- echo "initdone"
-initdone
-west #
  ipsec start
-Redirecting to: systemctl start ipsec.service
+Redirecting to: [initsystem]
 west #
  /testing/pluto/bin/wait-until-pluto-started
 west #
@@ -24,7 +21,6 @@ west #
  ipsec auto --add subnet6-bad
 036 Failed to load connection "subnet6-bad": subnets must have the same address family
 west #
- echo done
-done
+ ../bin/check-for-core.sh
 west #
  

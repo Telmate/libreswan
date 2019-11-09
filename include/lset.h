@@ -2,6 +2,7 @@
  *
  * Copyright (C) 1998-2002,2013 D. Hugh Redelmeier <hugh@mimosa.com>
  * Copyright (C) 2004-2008  Michael Richardson <mcr@xelerance.com>
+ * Copyright (C) 2019 Andrew Cagney <cagney@gnu.org>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -31,6 +32,7 @@ struct lswlog;
  */
 
 typedef uint_fast64_t lset_t;
+#define PRI_LSET "%"PRIxLSET
 #define PRIxLSET    PRIxFAST64
 #define LELEM_ROOF  64	/* all elements must be less than this */
 #define LEMPTY ((lset_t)0)
@@ -53,15 +55,17 @@ typedef uint_fast64_t lset_t;
  * bitnamesof() formats a display of a set of named bits (in a static area -- NOT RE-ENTRANT)
  * bitnamesofb() formats into a caller-supplied buffer (re-entrant)
  *
- * lswlog_enum_lset_short() formats into a caller-supplied buffer -- only form
+ * jam_enum_lset_short() formats into a caller-supplied buffer -- only form
  */
 extern bool testset(const char *const table[], lset_t val);
 extern const char *bitnamesof(const char *const table[], lset_t val);	/* NOT RE-ENTRANT */
 extern const char *bitnamesofb(const char *const table[],
 			       lset_t val,
 			       char *buf, size_t blen);
-
+/* old */
 size_t lswlog_enum_lset_short(struct lswlog *, const struct enum_names *sd,
 			      const char *separator, lset_t val);
+/* new */
+#define jam_enum_lset_short lswlog_enum_lset_short
 
 #endif /* CONSTANTS_H */

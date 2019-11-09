@@ -1,7 +1,7 @@
 /testing/guestbin/swan-prep
 east #
  ipsec start
-Redirecting to: systemctl start ipsec.service
+Redirecting to: [initsystem]
 east #
  /testing/pluto/bin/wait-until-pluto-started
 east #
@@ -10,14 +10,12 @@ east #
 east #
  ipsec auto --status
 000 using kernel interface: netkey
-000 interface lo/lo 127.0.0.1@4500
-000 interface lo/lo 127.0.0.1@500
-000 interface eth0/eth0 192.0.2.254@4500
-000 interface eth0/eth0 192.0.2.254@500
-000 interface eth1/eth1 192.1.2.23@4500
-000 interface eth1/eth1 192.1.2.23@500
-000 interface eth2/eth2 192.9.2.23@4500
-000 interface eth2/eth2 192.9.2.23@500
+000 interface lo/lo 127.0.0.1:4500
+000 interface lo/lo 127.0.0.1:500
+000 interface eth0/eth0 192.0.2.254:4500
+000 interface eth0/eth0 192.0.2.254:500
+000 interface eth1/eth1 192.1.2.23:4500
+000 interface eth1/eth1 192.1.2.23:500
 000  
 000  
 000 fips mode=disabled;
@@ -30,7 +28,7 @@ east #
 000 nssdir=/etc/ipsec.d, dumpdir=/run/pluto, statsbin=unset
 000 dnssec-rootkey-file=/var/lib/unbound/root.key, dnssec-trusted=<unset>
 000 sbindir=PATH/sbin, libexecdir=PATH/libexec/ipsec
-000 nhelpers=-1, uniqueids=yes, dnssec-enable=yes, perpeerlog=no, logappend=no, logip=yes, shuntlifetime=900s, xfrmlifetime=300s
+000 nhelpers=-1, uniqueids=yes, dnssec-enable=yes, perpeerlog=no, logappend=no, logip=yes, shuntlifetime=900s, xfrmlifetime=30s
 000 ddos-cookies-threshold=50000, ddos-max-halfopen=25000, ddos-mode=auto
 000 ikeport=500, ikebuf=0, msg_errqueue=yes, strictcrlpolicy=no, crlcheckinterval=0, listen=<any>, nflog-all=0
 000 ocsp-enable=no, ocsp-strict=no, ocsp-timeout=2, ocsp-uri=<unset>
@@ -89,7 +87,6 @@ east #
 000 algorithm IKE PRF: name=HMAC_SHA2_384, hashlen=48
 000 algorithm IKE PRF: name=HMAC_SHA2_512, hashlen=64
 000 algorithm IKE PRF: name=AES_XCBC, hashlen=16
-000 algorithm IKE DH Key Exchange: name=MODP1024, bits=1024
 000 algorithm IKE DH Key Exchange: name=MODP1536, bits=1536
 000 algorithm IKE DH Key Exchange: name=MODP2048, bits=2048
 000 algorithm IKE DH Key Exchange: name=MODP3072, bits=3072
@@ -110,7 +107,6 @@ east #
 000 "westnet-eastnet-ipv4-psk-ikev2":   xauth us:none, xauth them:none,  my_username=[any]; their_username=[any]
 000 "westnet-eastnet-ipv4-psk-ikev2":   our auth:secret, their auth:secret
 000 "westnet-eastnet-ipv4-psk-ikev2":   modecfg info: us:none, them:none, modecfg policy:push, dns:unset, domains:unset, banner:unset, cat:unset;
-000 "westnet-eastnet-ipv4-psk-ikev2":   labeled_ipsec:no;
 000 "westnet-eastnet-ipv4-psk-ikev2":   policy_label:unset;
 000 "westnet-eastnet-ipv4-psk-ikev2":   ike_life: 3600s; ipsec_life: 28800s; replay_window: 32; rekey_margin: 540s; rekey_fuzz: 100%; keyingtries: 0;
 000 "westnet-eastnet-ipv4-psk-ikev2":   retransmit-interval: 9999ms; retransmit-timeout: 99s;
@@ -170,7 +166,6 @@ default via 192.1.2.254 dev eth1
 192.0.1.0/24 via 192.1.2.45 dev eth1
 192.0.2.0/24 dev eth0 proto kernel scope link src 192.0.2.254
 192.1.2.0/24 dev eth1 proto kernel scope link src 192.1.2.23
-192.9.2.0/24 dev eth2 proto kernel scope link src 192.9.2.23
 NSS_CERTIFICATES
 Certificate Nickname                                         Trust Attributes
                                                              SSL,S/MIME,JAR/XPI

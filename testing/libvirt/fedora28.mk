@@ -7,15 +7,36 @@ KVM_PACKAGE_INSTALL = dnf install -y
 KVM_PACKAGE_UPGRADE = dnf upgrade -y
 KVM_DEBUGINFO_INSTALL = dnf debuginfo-install -y
 KVM_INSTALL_RPM_LIST = 'rpm -aq > /var/tmp/rpm-qa-fedora-updates.log'
+KVM_F28_HACK = $(KVMSH) --shutdown $(KVM_CLONE_DOMAIN) \
+                sed -i -e '"s/HWADDR=.*/HWADDR=\"$$(cat /sys/class/net/e[n-t][h-s]?/address)\"/"' \
+                        /etc/sysconfig/network-scripts/ifcfg-eth0 \; \
+                service network restart \; \
+                ip address show scope global
 
 # Force the NSS version - version 3.40 caused pluto to dump core while
 # loading the NSS DB.  Versions 3.36 and 3.41 (current at time of
 # writing) seem to work.
 
 # NSS_VERSION = -3.36.0-1.0.fc28.x86_64
-NSS_VERSION =
+NSS_VERSION ?=
 
-KVM_PACKAGES = \
+# The kernel packages can only be installed.  To stop a new version
+# being installed set this to empty.
+
+KVM_KERNEL_VERSION ?=
+KVM_KERNEL_PACKAGES ?= \
+    kernel$(KVM_KERNEL_VERSION) \
+    kernel-core$(KVM_KERNEL_VERSION) \
+    kernel-modules$(KVM_KERNEL_VERSION) \
+    kernel-devel$(KVM_KERNEL_VERSION) \
+    kernel-headers$(KVM_KERNEL_VERSION) \
+    kernel-modules-extra$(KVM_KERNEL_VERSION)
+
+KVM_INSTALL_PACKAGES ?= \
+    $(KVM_KERNEL_PACKAGES) \
+    $(KVM_UPGRADE_PACKAGES)
+
+KVM_UPGRADE_PACKAGES ?= \
     ElectricFence \
     audit-libs-devel \
     bind-utils	\
@@ -25,13 +46,16 @@ KVM_PACKAGES = \
     elfutils-libelf-devel \
     fipscheck-devel \
     flex \
+    fping \
     gcc \
     gdb \
     git \
     glibc-devel \
     hping3 \
     ike-scan \
-    ipsec-tools \
+    iproute \
+    iptables \
+    iputils \
     ldns \
     ldns-devel \
     libcap-ng-devel \
@@ -39,6 +63,7 @@ KVM_PACKAGES = \
     libevent-devel \
     libseccomp-devel \
     libselinux-devel \
+    linux-firmware \
     lsof \
     mtr \
     nc \
@@ -55,13 +80,12 @@ KVM_PACKAGES = \
     openldap-devel \
     pam-devel \
     patch \
+    perf \
     pexpect \
     policycoreutils-python-utils \
     psmisc \
-    python2-pyOpenSSL \
+    python3-pyOpenSSL \
     python3-pexpect \
-    python-setproctitle \
-    racoon2 \
     rpm-build \
     screen \
     strace \

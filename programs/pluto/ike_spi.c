@@ -2,7 +2,7 @@
  *
  * Copyright (C) 1997 Angelos D. Keromytis.
  * Copyright (C) 1998-2002  D. Hugh Redelmeier.
- * Copyright (C) 2018  Andrew Cagney
+ * Copyright (C) 2018-2019 Andrew Cagney <cagney@gnu.org>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -42,11 +42,13 @@ bool ike_spis_eq(const ike_spis_t *lhs, const ike_spis_t *rhs)
 		ike_spi_eq(&lhs->responder, &rhs->responder));
 }
 
-static uint8_t ike_spi_secret[SHA2_256_DIGEST_SIZE];
+static struct {
+	uint8_t bytes[SHA2_256_DIGEST_SIZE];
+} ike_spi_secret;
 
 void refresh_ike_spi_secret(void)
 {
-	get_rnd_bytes(ike_spi_secret, sizeof(ike_spi_secret));
+	get_rnd_bytes(&ike_spi_secret, sizeof(ike_spi_secret));
 }
 
 /*
@@ -76,16 +78,13 @@ ike_spi_t ike_responder_spi(const ip_address *addr)
 	do {
 		static uint32_t counter = 0; /* STATIC */
 
-		struct crypt_hash *ctx = crypt_hash_init(&ike_alg_hash_sha2_256,
-							 "IKE Responder SPI",
-							 DBG_CRYPT);
+		struct crypt_hash *ctx = crypt_hash_init("IKE SPIr",
+							 &ike_alg_hash_sha2_256);
 
-		crypt_hash_digest_bytes(ctx, "addr", addr, sizeof(*addr));
-		crypt_hash_digest_bytes(ctx, "sod", ike_spi_secret,
-					sizeof(ike_spi_secret));
+		crypt_hash_digest_thing(ctx, "addr", *addr);
+		crypt_hash_digest_thing(ctx, "sod", ike_spi_secret);
 		counter++;
-		crypt_hash_digest_bytes(ctx, "counter", &counter,
-					sizeof(counter));
+		crypt_hash_digest_thing(ctx, "counter", counter);
 
 		u_char buffer[SHA2_256_DIGEST_SIZE];
 		crypt_hash_final_bytes(&ctx, buffer, SHA2_256_DIGEST_SIZE);
@@ -93,29 +92,6 @@ ike_spi_t ike_responder_spi(const ip_address *addr)
 		passert(IKE_SA_SPI_SIZE <= SHA2_256_DIGEST_SIZE);
 		passert(IKE_SA_SPI_SIZE == sizeof(spi));
 		memcpy(&spi, buffer, sizeof(spi));
-
 	} while (ike_spi_is_zero(&spi)); /* probably never loops */
 	return spi;
-}
-
-/*
- * Generate the IKE Initiator's SPI.
- */
-void fill_ike_initiator_spi(struct state *st)
-{
-	st->st_ike_spis.initiator = ike_initiator_spi();
-}
-
-/*
- * Generate the IKE Responder's SPI.
- *
- * As responder, we use a hashing method to get a pseudo random
- * value instead of using our own random pool. It will prevent
- * an attacker from gaining raw data from our random pool and
- * it will prevent an attacker from depleting our random pool
- * or entropy.
- */
-void fill_ike_responder_spi(struct state *st, const ip_address *addr)
-{
-	st->st_ike_spis.responder = ike_responder_spi(addr);
 }

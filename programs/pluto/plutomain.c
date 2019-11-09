@@ -9,13 +9,13 @@
  * Copyright (C) 2008-2009 David McCullough <david_mccullough@securecomputing.com>
  * Copyright (C) 2009 Avesh Agarwal <avagarwa@redhat.com>
  * Copyright (C) 2009-2016 Tuomo Soini <tis@foobar.fi>
- * Copyright (C) 2012-2013 Paul Wouters <pwouters@redhat.com>
+ * Copyright (C) 2012-2019 Paul Wouters <pwouters@redhat.com>
  * Copyright (C) 2012-2016 Paul Wouters <paul@libreswan.org>
  * Copyright (C) 2012 Kim B. Heino <b@bbbs.net>
  * Copyright (C) 2012 Philippe Vouters <Philippe.Vouters@laposte.net>
  * Copyright (C) 2012 Wes Hardaker <opensource@hardakers.net>
  * Copyright (C) 2013 David McCullough <ucdevel@gmail.com>
- * Copyright (C) 2016, 2018 Andrew Cagney
+ * Copyright (C) 2016-2019 Andrew Cagney <cagney@gnu.org>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -61,8 +61,9 @@
 #include "state_db.h"	/* for init_state_db() */
 #include "nat_traversal.h"
 #include "ike_alg.h"
-#include "af_info.h"		/* for init_af_info() */
 #include "ikev2_redirect.h"
+#include "root_certs.h"		/* for init_root_certs() */
+#include "hostpair.h"		/* for init_host_pair() */
 
 #ifndef IPSECDIR
 #define IPSECDIR "/etc/ipsec.d"
@@ -104,6 +105,7 @@ static const char *fips_package_files[] = { IPSEC_EXECDIR "/pluto", NULL };
 /* pulled from main for show_setup_plutomain() */
 static const struct lsw_conf_options *oco;
 static char *coredir;
+static char *conffile;
 static int pluto_nss_seedbits;
 static int nhelpers = -1;
 static bool do_dnssec = FALSE;
@@ -122,6 +124,7 @@ static void free_pluto_main(void)
 {
 	/* Some values can be NULL if not specified as pluto argument */
 	pfree(coredir);
+	pfree(conffile);
 	pfreeany(pluto_stats_binary);
 	pfreeany(pluto_listen);
 	pfree(pluto_vendorid);
@@ -160,6 +163,7 @@ static const char compile_time_interop_options[] = ""
 #ifdef KLIPS
 	" KLIPS"
 #endif
+	" esp-hw-offload"
 #if USE_FORK
 	" FORK"
 #endif
@@ -432,20 +436,17 @@ static bool pluto_init_nss(char *nssdir)
 /* 0 is special and default: do not check crls dynamically */
 deltatime_t crl_check_interval = DELTATIME_INIT(0);
 
-#ifdef HAVE_LABELED_IPSEC
 /*
  * Attribute Type "constant" for Security Context
  *
- * ??? NOT A CONSTANT!
  * Originally, we assigned the value 10, but that properly belongs to ECN_TUNNEL.
  * We then assigned 32001 which is in the private range RFC 2407.
  * Unfortunately, we feel we have to support 10 as an option for backward
  * compatibility.
  * This variable specifies (globally!!) which we support: 10 or 32001.
- * ??? surely that makes migration to 32001 all or nothing.
+ * That makes migration to 32001 all or nothing.
  */
 uint16_t secctx_attr_type = SECCTX;
-#endif
 
 /*
  * Table of Pluto command-line options.
@@ -493,6 +494,7 @@ static const struct option long_opts[] = {
 	{ "log-no-time\0", no_argument, NULL, 't' }, /* was --plutostderrlogtime */
 	{ "log-no-append\0", no_argument, NULL, '7' },
 	{ "log-no-ip\0", no_argument, NULL, '<' },
+	{ "log-no-audit\0", no_argument, NULL, 'a' },
 	{ "force_busy\0_", no_argument, NULL, 'D' },	/* _ */
 	{ "force-busy\0", no_argument, NULL, 'D' },
 	{ "force-unlimited\0", no_argument, NULL, 'U' },
@@ -562,12 +564,10 @@ static const struct option long_opts[] = {
 	{ "nhelpers\0<number>", required_argument, NULL, 'j' },
 	{ "expire-shunt-interval\0<secs>", required_argument, NULL, '9' },
 	{ "seedbits\0<number>", required_argument, NULL, 'c' },
-#ifdef HAVE_LABELED_IPSEC
-	/* ??? really an attribute type, not a value */
+	/* really an attribute type, not a value */
 	{ "secctx_attr_value\0_", required_argument, NULL, 'w' },	/* obsolete name; _ */
 	{ "secctx-attr-value\0<number>", required_argument, NULL, 'w' },	/* obsolete name */
 	{ "secctx-attr-type\0<number>", required_argument, NULL, 'w' },
-#endif
 #ifdef HAVE_SECCOMP
 	{ "seccomp-enabled\0", no_argument, NULL, '3' },
 	{ "seccomp-tolerant\0", no_argument, NULL, '4' },
@@ -693,6 +693,7 @@ int main(int argc, char **argv)
 
 	pluto_name = argv[0];
 
+	conffile = clone_str(IPSEC_CONF, "conffile in main()");
 	coredir = clone_str(DEFAULT_RUNDIR, "coredir in main()");
 	rundir = clone_str(DEFAULT_RUNDIR, "rundir");
 	pluto_vendorid = clone_str(ipsec_version_vendorid(), "vendorid in main()");
@@ -862,6 +863,10 @@ int main(int argc, char **argv)
 
 		case '<':	/* --log-no-ip */
 			log_ip = FALSE;
+			continue;
+
+		case 'a':	/* --log-no-audit */
+			log_to_audit = FALSE;
 			continue;
 
 		case '8':	/* --drop-oppo-null */
@@ -1116,11 +1121,11 @@ int main(int argc, char **argv)
 			continue;
 
 		case 'N':	/* --debug-none */
-			base_debugging = DBG_NONE;
+			cur_debugging = DBG_NONE;
 			continue;
 
 		case 'A':	/* --debug-all */
-			base_debugging = DBG_ALL;
+			cur_debugging = DBG_ALL;
 			continue;
 
 		case 'P':	/* --perpeerlogbase */
@@ -1188,11 +1193,13 @@ int main(int argc, char **argv)
 			 * overwrite all previously set options. Keep this
 			 * in the same order as long_opts[] is.
 			 */
-			struct starter_config *cfg = read_cfg_file(optarg);
+			pfree(conffile);
+			conffile = clone_str(optarg, "conffile via getopt");
+			struct starter_config *cfg = read_cfg_file(conffile);
 
 			/* leak */
 			set_cfg_string(&pluto_log_file,
-				cfg->setup.strings[KSF_PLUTOSTDERRLOG]);
+				cfg->setup.strings[KSF_LOGFILE]);
 #ifdef USE_DNSSEC
 			set_dnssec_file_names(cfg);
 #endif
@@ -1201,9 +1208,10 @@ int main(int argc, char **argv)
 				log_to_syslog = FALSE;
 			/* plutofork= no longer supported via config file */
 			log_with_timestamp =
-				cfg->setup.options[KBF_PLUTOSTDERRLOGTIME];
-			log_append = cfg->setup.options[KBF_PLUTOSTDERRLOGAPPEND];
-			log_ip = cfg->setup.options[KBF_PLUTOSTDERRLOGIP];
+				cfg->setup.options[KBF_LOGTIME];
+			log_append = cfg->setup.options[KBF_LOGAPPEND];
+			log_ip = cfg->setup.options[KBF_LOGIP];
+			log_to_audit = cfg->setup.options[KBF_AUDIT_LOG];
 			pluto_drop_oppo_null = cfg->setup.options[KBF_DROP_OPPO_NULL];
 			pluto_ddos_mode = cfg->setup.options[KBF_DDOS_MODE];
 #ifdef HAVE_SECCOMP
@@ -1355,10 +1363,8 @@ int main(int argc, char **argv)
 				cfg->setup.strings[KSF_GLOBAL_REDIRECT_TO]);
 
 			nhelpers = cfg->setup.options[KBF_NHELPERS];
-#ifdef HAVE_LABELED_IPSEC
 			secctx_attr_type = cfg->setup.options[KBF_SECCTX];
-#endif
-			base_debugging = cfg->setup.options[KBF_PLUTODEBUG];
+			cur_debugging = cfg->setup.options[KBF_PLUTODEBUG];
 
 			char *protostack = cfg->setup.strings[KSF_PROTOSTACK];
 
@@ -1390,8 +1396,8 @@ int main(int argc, char **argv)
 		case OPT_DEBUG:
 		{
 			lmod_t mod = empty_lmod;
-			if (lmod_arg(&mod, &debug_lmod_info, optarg)) {
-				base_debugging = lmod(base_debugging, mod);
+			if (lmod_arg(&mod, &debug_lmod_info, optarg, true/*enable*/)) {
+				cur_debugging = lmod(cur_debugging, mod);
 			} else {
 				libreswan_log("unrecognized --debug '%s' option ignored",
 					      optarg);
@@ -1402,8 +1408,8 @@ int main(int argc, char **argv)
 		case OPT_IMPAIR:
 		{
 			lmod_t mod = empty_lmod;
-			if (lmod_arg(&mod, &impair_lmod_info, optarg)) {
-				base_debugging = lmod(base_debugging, mod);
+			if (lmod_arg(&mod, &impair_lmod_info, optarg, true/*enable*/)) {
+				cur_debugging = lmod(cur_debugging, mod);
 			} else {
 				libreswan_log("unrecognized --impair '%s' option ignored",
 					      optarg);
@@ -1434,7 +1440,6 @@ int main(int argc, char **argv)
 	}
 	if (optind != argc)
 		invocation_fail("unexpected argument");
-	reset_debugging();
 
 	if (chdir(coredir) == -1) {
 		int e = errno;
@@ -1554,7 +1559,6 @@ int main(int argc, char **argv)
 		passert(log_to_stderr || dup2(0, 2) == 2);
 	}
 
-	init_af_info();
 	init_constants();
 	init_pluto_constants();
 
@@ -1578,8 +1582,8 @@ int main(int argc, char **argv)
 		 * impairs are also not allowed but cannot come in via
 		 * ipsec.conf, only whack
 		 */
-		if (base_debugging & DBG_PRIVATE) {
-			base_debugging &= ~DBG_PRIVATE;
+		if (cur_debugging & DBG_PRIVATE) {
+			cur_debugging &= ~DBG_PRIVATE;
 			loglog(RC_LOG_SERIOUS, "FIPS mode: debug-private disabled as such logging is not allowed");
 		}
 	}
@@ -1698,7 +1702,7 @@ int main(int argc, char **argv)
 #endif
 
 #ifdef USE_LINUX_AUDIT
-	linux_audit_init();
+	linux_audit_init(log_to_audit);
 #else
 	libreswan_log("Linux audit support [disabled]");
 #endif
@@ -1739,15 +1743,18 @@ int main(int argc, char **argv)
 /* Initialize all of the various features */
 
 	init_state_db();
+	init_event_base();
 
+	init_rate_log();
 	init_nat_traversal(keep_alive);
 
 	init_virtual_ip(virtual_private);
-	/* obsoleted by nss code init_rnd_pool(); */
-	init_event_base();
+	/* obsoleted by nss code: init_rnd_pool(); */
+	init_root_certs();
 	init_secret();
 	init_states();
 	init_connections();
+	init_host_pair();
 	init_ike_alg();
 	test_ike_alg();
 
@@ -1781,7 +1788,7 @@ int main(int argc, char **argv)
 	}
 #endif
 
-	call_server();
+	call_server(conffile);
 	return -1;	/* Shouldn't ever reach this */
 }
 
@@ -1814,6 +1821,7 @@ void exit_pluto(int status)
  #ifdef USE_SYSTEMD_WATCHDOG
 	pluto_sd(PLUTO_SD_STOPPING, status);
  #endif
+	free_root_certs();
 	free_preshared_secrets();
 	free_remembered_public_keys();
 	delete_every_connection();
@@ -1857,7 +1865,7 @@ void show_setup_plutomain(void)
 	whack_log(RC_COMMENT, " ");	/* spacer */
 	whack_log(RC_COMMENT, "configdir=%s, configfile=%s, secrets=%s, ipsecdir=%s",
 		oco->confdir,
-		oco->conffile,
+		conffile, /* oco contains only a copy of hardcoded default */
 		oco->secretsfile,
 		oco->confddir);
 
@@ -1876,9 +1884,10 @@ void show_setup_plutomain(void)
 		IPSEC_SBINDIR,
 		IPSEC_EXECDIR);
 
-	whack_log(RC_COMMENT, "pluto_version=%s, pluto_vendorid=%s",
+	whack_log(RC_COMMENT, "pluto_version=%s, pluto_vendorid=%s, audit-log=%s",
 		ipsec_version_code(),
-		pluto_vendorid);
+		pluto_vendorid,
+		bool_str(log_to_audit));
 
 	whack_log(RC_COMMENT,
 		"nhelpers=%d, uniqueids=%s, "

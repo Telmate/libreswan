@@ -14,6 +14,8 @@
 # or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
 # for more details.
 
+import signal
+import faulthandler
 import argparse
 import sys
 import os
@@ -42,9 +44,16 @@ class Stats(Enum):
 
 def main():
 
+    # If SIGUSR1, backtrace all threads; hopefully this is early
+    # enough.
+    faulthandler.register(signal.SIGUSR1)
+
     parser = argparse.ArgumentParser(description="list test results",
-                                     epilog="By default this tool uses 'sanitizer.sh' and 'diff' to generate up-to-the-minuite test results (the previously generated files 'OUTPUT/*.console.txt' and 'OUTPUT/*.console.diff' are ignored).  While this makes things a little slower, it has the benefit of always providing the most up-to-date and correct results (for instance, changes to known-good files are reflected immediately).")
+                                     epilog="By default this tool uses 'sanitizer.sh' and 'diff' to generate up-to-the-minuite test results (the previously generated files 'OUTPUT/*.console.txt' and 'OUTPUT/*.console.diff' are ignored).  While this makes things a little slower, it has the benefit of always providing the most up-to-date and correct results (for instance, changes to known-good files are reflected immediately).  SIGUSR1 will dump all thread stacks")
     parser.add_argument("--verbose", "-v", action="count", default=0)
+
+    parser.add_argument("--exit-ok", action="store_true",
+                        help=("return a zero exit status; normally, when there are failures, a non-zero exit status is returned"))
 
     parser.add_argument("--quick", action="store_true",
                         help=("Use the previously generated '.console.txt' and '.console.diff' files"))
@@ -106,6 +115,7 @@ def main():
         logger.info("  Json: %s", args.json)
         logger.info("  Quick: %s", args.quick)
         logger.info("  Update: %s", args.update)
+        logger.info("  Exit OK: %s", args.exit_ok)
         testsuite.log_arguments(logger, args)
         logutil.log_arguments(logger, args)
         skip.log_arguments(logger, args)
@@ -151,8 +161,9 @@ def main():
         return 1
 
     result_stats = stats.Results()
+    exit_code = 1 # assume a barf
     try:
-        results(logger, tests, baseline, args, result_stats)
+        exit_code = results(logger, tests, baseline, args, result_stats)
     finally:
         if args.stats is Stats.details:
             result_stats.log_details(stderr_log, header="Details:", prefix="  ")
@@ -161,7 +172,7 @@ def main():
         publish.json_results(logger, args)
         publish.json_summary(logger, args)
 
-    return 0
+    return exit_code
 
 
 def stderr_log(fmt, *args):
@@ -170,6 +181,8 @@ def stderr_log(fmt, *args):
 
 
 def results(logger, tests, baseline, args, result_stats):
+
+    failures = 0
 
     for test in tests:
 
@@ -206,6 +219,11 @@ def results(logger, tests, baseline, args, result_stats):
                     continue
             result_stats.add_result(result)
 
+            if result.resolution not in [post.Resolution.PASSED,
+                                         post.Resolution.UNTESTED,
+                                         post.Resolution.UNSUPPORTED]:
+                failures = failures + 1
+
             publish.test_files(logger, args, result)
             publish.test_output_files(logger, args, result)
             publish.json_result(logger, args, result)
@@ -224,6 +242,15 @@ def results(logger, tests, baseline, args, result_stats):
             printer.build_result(logger, result, baseline, args, args.print, b)
 
     publish.json_status(logger, args, "finished")
+
+    # exit code
+    if args.exit_ok:
+        return 0
+    elif failures:
+        return 1
+    else:
+        return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

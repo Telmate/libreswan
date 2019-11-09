@@ -13,6 +13,7 @@
  * Copyright (C) 2016, Andrew Cagney <cagney@gnu.org>
  * Copyright (C) 2017 Vukasin Karadzic <vukasin.karadzic@gmail.com>
  * Copyright (C) 2018 Sahana Prasad <sahana.prasad07@gmail.com>
+ * Copyright (C) 2019 D. Hugh Redelmeier <hugh@mimosa.com>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -32,7 +33,6 @@
 #include <arpa/inet.h>
 #include <resolv.h>
 
-#include <libreswan.h>
 
 #include "sysdep.h"
 #include "constants.h"
@@ -86,12 +86,9 @@ static int print_secrets(struct secret *secret,
 			 struct private_key_stuff *pks UNUSED,
 			 void *uservoid UNUSED)
 {
-	char idb1[IDTOA_BUF];
-	char idb2[IDTOA_BUF];
-	const char *kind = "?";
-	const char *more = "";
 	struct id_list *ids;
 
+	const char *kind;
 	switch (pks->kind) {
 	case PKK_PSK:
 		kind = "PSK";
@@ -110,20 +107,22 @@ static int print_secrets(struct secret *secret,
 	}
 
 	ids = lsw_get_idlist(secret);
-	strcpy(idb1, "%any");
-	strcpy(idb2, "");
 
-	if (ids != NULL) {
-		idtoa(&ids->id, idb1, sizeof(idb1));
-		if (ids->next != NULL) {
-			idtoa(&ids->next->id, idb2, sizeof(idb2));
-			if (ids->next->next != NULL)
-				more = "more";
+	LSWLOG_WHACK(RC_COMMENT, buf) {
+		jam(buf, "    %d: %s ", pks->line, kind);
+		if (ids == NULL) {
+			jam(buf, "%%any");
+		} else {
+			jam_id(buf, &ids->id, jam_sanitized_bytes);
+			if (ids->next != NULL) {
+				jam(buf, " ");
+				jam_id(buf, &ids->next->id, jam_sanitized_bytes);
+				if (ids->next->next != NULL) {
+					jam(buf, " more");
+				}
+			}
 		}
 	}
-
-	whack_log(RC_COMMENT, "    %d: %s %s %s%s",
-		  pks->line, kind, idb1, idb2, more);
 
 	/* continue loop until end */
 	return 1;
@@ -295,8 +294,7 @@ int sign_hash_RSA(const struct RSA_private_key *k,
 
 int sign_hash_ECDSA(const struct ECDSA_private_key *k,
 		    const u_char *hash_val, size_t hash_len,
-		    u_char *sig_val, size_t sig_len,
-		    enum notify_payload_hash_algorithms hash_algo UNUSED)
+		    u_char *sig_val, size_t sig_len)
 {
 	SECKEYPrivateKey *privateKey = NULL;
 	PK11SlotInfo *slot = NULL;
@@ -324,7 +322,7 @@ int sign_hash_ECDSA(const struct ECDSA_private_key *k,
 
 	CERTCertificate *cert = get_cert_by_ckaid_t_from_nss(k->pub.ckaid);
 
-	LSWDBGP(DBG_MASK, buf) {
+	LSWDBGP(DBG_BASE, buf) {
 		lswlogf(buf, "got cert form ckaid");
 		lswlog_nss_error(buf);
 	}
@@ -334,7 +332,7 @@ int sign_hash_ECDSA(const struct ECDSA_private_key *k,
 
 	if (privateKey == NULL) {
 		LSWDBGP(DBG_CRYPT, buf) {
-		        lswlogf(buf, "NSS: Can't find the private key from the NSS CKA_ID");
+			lswlogf(buf, "NSS: Can't find the private key from the NSS CKA_ID");
 			lswlog_nss_error(buf);
 		}
 
@@ -417,8 +415,8 @@ err_t RSA_signature_verify_nss(const struct RSA_public_key *k,
 	publicKey->pkcs11ID = CK_INVALID_HANDLE;
 
 	/* make a local copy.  */
-	chunk_t n = clone_chunk(k->n, "n");
-	chunk_t e = clone_chunk(k->e, "e");
+	chunk_t n = clone_hunk(k->n, "n");
+	chunk_t e = clone_hunk(k->e, "e");
 
 	/* Converting n and e to nss_n and nss_e */
 	nss_n.data = n.ptr;
@@ -530,383 +528,210 @@ err_t RSA_signature_verify_nss(const struct RSA_public_key *k,
 }
 
 /*
- * Check signature against all RSA public keys we can find.
- * If we need keys from DNS KEY records, and they haven't been fetched,
+ * Check signature against all RSA public keys we can find.  If we
+ * need keys from DNS KEY records, and they haven't been fetched,
  * return STF_SUSPEND to ask for asynch DNS lookup.
  *
- * Note: parameter keys_from_dns contains results of DNS lookup for key
- * or is NULL indicating lookup not yet tried.
+ * Note: parameter keys_from_dns contains results of DNS lookup for
+ * key or is NULL indicating lookup not yet tried.
  *
- * take_a_crack is a helper function.  Mostly forensic.
- * If only we had coroutines.
+ * take_a_crack is a helper function.  Mostly forensic.  If only we
+ * had coroutines. (XXX: generators).
  */
-struct tac_state_RSA {
-	/* RSA_check_signature's args that take_a_crack needs */
+struct tac_state {
+	const struct pubkey_type *type;
+	/* check_signature's args that take_a_crack needs */
 	struct state *st;
 	const u_char *hash_val;
 	size_t hash_len;
 	const pb_stream *sig_pbs;
 	enum notify_payload_hash_algorithms hash_algo;
 
-	err_t (*try_RSA_signature)(const u_char hash_val[MAX_DIGEST_LEN],
-				   size_t hash_len,
-				   const pb_stream *sig_pbs,
-				   struct pubkey *kr,
-				   struct state *st,
-				   enum notify_payload_hash_algorithms hash_algo);
+	err_t (*try_signature)(const u_char hash_val[MAX_DIGEST_LEN],
+			       size_t hash_len,
+			       const pb_stream *sig_pbs,
+			       struct pubkey *kr,
+			       struct state *st,
+			       enum notify_payload_hash_algorithms hash_algo);
 
 	/* state carried between calls */
 	err_t best_ugh; /* most successful failure */
 	int tried_cnt;  /* number of keys tried */
 	char tried[50]; /* keyids of tried public keys */
-	char *tn;       /* roof of tried[] */
+	jambuf_t tn;
 };
 
-struct tac_state_ECDSA {
-	/* RSA_check_signature's args that take_a_crack needs */
-	struct state *st;
-	const u_char *hash_val;
-	size_t hash_len;
-	const pb_stream *sig_pbs;
-	enum notify_payload_hash_algorithms hash_algo;
-
-	err_t (*try_ECDSA_signature)(const u_char hash_val[MAX_DIGEST_LEN],
-				   size_t hash_len,
-				   const pb_stream *sig_pbs,
-				   struct pubkey *kr,
-				   struct state *st,
-				   enum notify_payload_hash_algorithms hash_algo);
-
-	/* state carried between calls */
-	err_t best_ugh; /* most successful failure */
-	int tried_cnt;  /* number of keys tried */
-	char tried[50]; /* keyids of tried public keys */
-	char *tn;       /* roof of tried[] */
-};
-
-static bool take_a_crack_RSA(struct tac_state_RSA *s,
+static bool take_a_crack(struct tac_state *s,
 			 struct pubkey *kr,
 			 const char *story)
 {
-	err_t ugh =
-		(s->try_RSA_signature)(s->hash_val, s->hash_len, s->sig_pbs,
-				       kr, s->st, s->hash_algo);
-	const struct RSA_public_key *k = &kr->u.rsa;
-
 	s->tried_cnt++;
+	err_t ugh = (s->try_signature)(s->hash_val, s->hash_len, s->sig_pbs,
+				       kr, s->st, s->hash_algo);
+
+	const char *key_id_str = pubkey_keyid(kr);
+
 	if (ugh == NULL) {
-		DBG(DBG_CRYPT | DBG_CONTROL,
-		    DBG_log("an RSA Sig check passed with *%s [%s]",
-			    k->keyid, story));
-		return TRUE;
+		dbg("an %s Sig check passed with *%s [%s]",
+		    kr->type->name, key_id_str, story);
+		return true;
 	} else {
-		DBG(DBG_CRYPT,
-		    DBG_log("an RSA Sig check failure %s with *%s [%s]",
-			    ugh + 1, k->keyid, story));
+		dbg("an %s Sig check failed '%s' with *%s [%s]",
+		    kr->type->name, ugh + 1, key_id_str, story);
 		if (s->best_ugh == NULL || s->best_ugh[0] < ugh[0])
 			s->best_ugh = ugh;
-		if (ugh[0] > '0' &&
-		    s->tn - s->tried + KEYID_BUF + 2 <
-		    (ptrdiff_t)sizeof(s->tried)) {
-			strcpy(s->tn, " *");
-			strcpy(s->tn + 2, k->keyid);
-			s->tn += strlen(s->tn);
+		if (ugh[0] > '0') {
+		    jam_string(&s->tn, " *");
+		    jam_string(&s->tn, key_id_str);
 		}
-		return FALSE;
+		return false;
 	}
 }
 
-static bool take_a_crack_ECDSA(struct tac_state_ECDSA *s,
-			 struct pubkey *kr,
-			 const char *story)
+static bool try_all_keys(const char *pubkey_description,
+			 struct pubkey_list **pubkey_db,
+			 const struct connection *c, realtime_t now,
+			 struct tac_state *s)
 {
-	err_t ugh =
-		(s->try_ECDSA_signature)(s->hash_val, s->hash_len, s->sig_pbs,
-				       kr, s->st, s->hash_algo);
-	const struct ECDSA_public_key *k = &kr->u.ecdsa;
+	struct pubkey_list **pp = pubkey_db;
 
-	s->tried_cnt++;
-	if (ugh == NULL) {
-		DBG(DBG_CRYPT | DBG_CONTROL,
-		    DBG_log("an ECDSA Sig check passed with *%s [%s]",
-			    k->keyid, story));
-		return TRUE;
-	} else {
-		DBG(DBG_CRYPT,
-		    DBG_log("an ECDSA Sig check failure %s with *%s [%s]",
-			    ugh + 1, k->keyid, story));
-		if (s->best_ugh == NULL || s->best_ugh[0] < ugh[0])
-			s->best_ugh = ugh;
-		if (ugh[0] > '0' &&
-		    s->tn - s->tried + KEYID_BUF + 2 <
-		    (ptrdiff_t)sizeof(s->tried)) {
-			strcpy(s->tn, " *");
-			strcpy(s->tn + 2, k->keyid);
-			s->tn += strlen(s->tn);
+	for (struct pubkey_list *p = *pubkey_db; p != NULL; p = *pp) {
+		struct pubkey *key = p->key;
+
+		if (DBGP(DBG_BASE)) {
+			id_buf printkid;
+			id_buf thatid;
+			DBG_log("checking %s keyid '%s' for match with '%s'",
+				s->type->name,
+				str_id(&key->id, &printkid),
+				str_id(&c->spd.that.id, &thatid));
 		}
-		return FALSE;
+
+		int pl;	/* value ignored */
+
+		if (key->type == s->type &&
+		    same_id(&c->spd.that.id, &key->id) &&
+		    trusted_ca_nss(key->issuer, c->spd.that.ca, &pl)) {
+			if (DBGP(DBG_BASE)) {
+				dn_buf buf;
+				DBG_log("%s key issuer CA is '%s'",
+					s->type->name,
+					str_dn_or_null(key->issuer, "%any", &buf));
+			}
+
+			/* check if found public key has expired */
+			if (!is_realtime_epoch(key->until_time) &&
+			    realbefore(key->until_time, now)) {
+				loglog(RC_LOG_SERIOUS,
+				       "cached %s public key has expired and has been deleted",
+					s->type->name);
+				*pp = free_public_keyentry(p);
+				continue; /* continue with next public key */
+			}
+
+			statetime_t try_time = statetime_start(s->st);
+			bool ok = take_a_crack(s, key, pubkey_description);
+			statetime_stop(&try_time, "%s() trying a pubkey", __func__);
+			if (ok) {
+				return true;
+			}
+		}
+		pp = &p->next;
 	}
+	return false;
 }
 
-stf_status RSA_check_signature_gen(struct state *st,
-				   const u_char hash_val[MAX_DIGEST_LEN],
-				   size_t hash_len,
-				   const pb_stream *sig_pbs,
-				   enum notify_payload_hash_algorithms hash_algo,
-				   err_t (*try_RSA_signature)(
-					   const u_char hash_val[MAX_DIGEST_LEN],
-					   size_t hash_len,
-					   const pb_stream *sig_pbs,
-					   struct pubkey *kr,
-					   struct state *st,
-					   enum notify_payload_hash_algorithms hash_algo))
+stf_status check_signature_gen(struct state *st,
+			       const u_char hash_val[MAX_DIGEST_LEN],
+			       size_t hash_len,
+			       const pb_stream *sig_pbs,
+			       enum notify_payload_hash_algorithms hash_algo,
+			       const struct pubkey_type *type,
+			       err_t (*try_signature)(
+				       const u_char hash_val[MAX_DIGEST_LEN],
+				       size_t hash_len,
+				       const pb_stream *sig_pbs,
+				       struct pubkey *kr,
+				       struct state *st,
+				       enum notify_payload_hash_algorithms hash_algo))
 {
 	const struct connection *c = st->st_connection;
-	struct tac_state_RSA s;
-
-	s.st = st;
-	s.hash_val = hash_val;
-	s.hash_len = hash_len;
-	s.sig_pbs = sig_pbs;
-	s.hash_algo = hash_algo;
-	s.try_RSA_signature = try_RSA_signature;
-
-	s.best_ugh = NULL;
-	s.tried_cnt = 0;
-	s.tn = s.tried;
+	struct tac_state s = {
+		.type = type,
+		.st = st,
+		.hash_val = hash_val,
+		.hash_len = hash_len,
+		.sig_pbs = sig_pbs,
+		.hash_algo = hash_algo,
+		.try_signature = try_signature,
+		.best_ugh = NULL,
+		.tried_cnt = 0,
+	};
+	s.tn = ARRAY_AS_JAMBUF(s.tried);
 
 	/* try all appropriate Public keys */
-	{
-		realtime_t nw = realnow();
+	realtime_t now = realnow();
 
-		DBG(DBG_CONTROL, {
-			char buf[IDTOA_BUF];
-			dntoa_or_null(buf, IDTOA_BUF, c->spd.that.ca, "%any");
-			DBG_log("required RSA CA is '%s'", buf);
-		});
-
-		struct pubkey_list **pp = &pluto_pubkeys;
-
-		for (struct pubkey_list *p = pluto_pubkeys; p != NULL; p = *pp) {
-			struct pubkey *key = p->key;
-
-			DBG(DBG_CONTROL, {
-				char printkid[IDTOA_BUF];
-				idtoa(&key->id, printkid, IDTOA_BUF);
-				char thatid[IDTOA_BUF];
-				idtoa(&c->spd.that.id, thatid, IDTOA_BUF);
-				DBG_log("checking RSA keyid '%s' for match with '%s'",
-					printkid, thatid);
-			});
-
-			int pl;	/* value ignored */
-
-			if (key->alg == PUBKEY_ALG_RSA &&
-			    same_id(&c->spd.that.id, &key->id) &&
-			    trusted_ca_nss(key->issuer, c->spd.that.ca, &pl))
-			{
-				DBG(DBG_CONTROL, {
-					char buf[IDTOA_BUF];
-					dntoa_or_null(buf, IDTOA_BUF,
-						key->issuer, "%any");
-					DBG_log("key issuer CA is '%s'", buf);
-				});
-
-				/* check if found public key has expired */
-				if (!is_realtime_epoch(key->until_time) &&
-				    realbefore(key->until_time, nw))
-				{
-					loglog(RC_LOG_SERIOUS,
-					       "cached RSA public key has expired and has been deleted");
-					*pp = free_public_keyentry(p);
-					continue; /* continue with next public key */
-				}
-
-				if (take_a_crack_RSA(&s, key, "preloaded key")) {
-					loglog(RC_LOG_SERIOUS, "Authenticated using RSA");
-					return STF_OK;
-				}
-			}
-			pp = &p->next;
-		}
+	if (DBGP(DBG_BASE)) {
+		dn_buf buf;
+		DBG_log("required %s CA is '%s'",
+			type->name,
+			str_dn_or_null(c->spd.that.ca, "%any", &buf));
 	}
 
-	/* if no key was found (evidenced by best_ugh == NULL)
-	 * and that side of connection is key_from_DNS_on_demand
-	 * then go search DNS for keys for peer.
+	if (try_all_keys("remote certificates",
+			 &st->st_remote_certs.pubkey_db,
+			 c, now, &s) ||
+	    try_all_keys("preloaded keys",
+			 &pluto_pubkeys,
+			 c, now, &s)) {
+		loglog(RC_LOG_SERIOUS, "Authenticated using %s with %s",
+			type->name,
+			(c->ike_version == IKEv1) ? "SHA-1" :
+				enum_name(&notify_hash_algo_names, hash_algo));
+		return STF_OK;
+	}
+
+	/*
+	 * if no key was found (evidenced by best_ugh == NULL) and
+	 * that side of connection is key_from_DNS_on_demand then go
+	 * search DNS for keys for peer.
 	 */
+
 	/* To be re-implemented */
 
-	/* no acceptable key was found: diagnose */
-	{
-		char id_buf[IDTOA_BUF]; /* arbitrary limit on length of ID reported */
+	/* sanitize the ID suitable for logging */
+	id_buf id_str = { "" }; /* arbitrary limit on length of ID reported */
+	str_id(&st->st_connection->spd.that.id, &id_str);
+	passert(id_str.buf[0] != '\0');
 
-		(void) idtoa(&st->st_connection->spd.that.id, id_buf,
-			     sizeof(id_buf));
-
-		if (s.best_ugh == NULL) {
-				loglog(RC_LOG_SERIOUS,
-				       "no RSA public key known for '%s'",
-				       id_buf);
-
-			/* ??? is this the best code there is? */
-			return STF_FAIL + INVALID_KEY_INFORMATION;
-		}
-
-		if (s.best_ugh[0] == '9') {
-			loglog(RC_LOG_SERIOUS, "%s", s.best_ugh + 1);
-			/* XXX Could send notification back */
-			return STF_FAIL + INVALID_HASH_INFORMATION;
-		} else {
-			if (s.tried_cnt == 1) {
-				loglog(RC_LOG_SERIOUS,
-				       "Signature check (on %s) failed (wrong key?); tried%s",
-				       id_buf, s.tried);
-				DBG(DBG_CONTROL,
-				    DBG_log("public key for %s failed: decrypted SIG payload into a malformed ECB (%s)",
-					    id_buf, s.best_ugh + 1));
-			} else {
-				loglog(RC_LOG_SERIOUS,
-				       "Signature check (on %s) failed: tried%s keys but none worked.",
-				       id_buf, s.tried);
-				DBG(DBG_CONTROL,
-				    DBG_log("all %d public keys for %s failed: best decrypted SIG payload into a malformed ECB (%s)",
-					    s.tried_cnt, id_buf,
-					    s.best_ugh + 1));
-			}
-			return STF_FAIL + INVALID_KEY_INFORMATION;
-		}
-	}
-}
-
-stf_status ECDSA_check_signature_gen(struct state *st,
-				   const u_char hash_val[MAX_DIGEST_LEN],
-				   size_t hash_len,
-				   const pb_stream *sig_pbs,
-				   enum notify_payload_hash_algorithms hash_algo,
-				   err_t (*try_ECDSA_signature)(
-					   const u_char hash_val[MAX_DIGEST_LEN],
-					   size_t hash_len,
-					   const pb_stream *sig_pbs,
-					   struct pubkey *kr,
-					   struct state *st,
-					   enum notify_payload_hash_algorithms hash_algo))
-{
-	const struct connection *c = st->st_connection;
-	struct tac_state_ECDSA s;
-
-	s.st = st;
-	s.hash_val = hash_val;
-	s.hash_len = hash_len;
-	s.sig_pbs = sig_pbs;
-	s.hash_algo = hash_algo;
-	s.try_ECDSA_signature = try_ECDSA_signature;
-
-	s.best_ugh = NULL;
-	s.tried_cnt = 0;
-	s.tn = s.tried;
-
-	/* try all appropriate Public keys */   /* ASKK */
-	{
-		realtime_t nw = realnow();
-
-		DBG(DBG_CONTROL, {
-			char buf[IDTOA_BUF];
-			dntoa_or_null(buf, IDTOA_BUF, c->spd.that.ca, "%any");
-			DBG_log("required ECDSA CA is '%s'", buf);
-		});
-
-		struct pubkey_list **pp = &pluto_pubkeys;
-
-		for (struct pubkey_list *p = pluto_pubkeys; p != NULL; p = *pp) {
-			struct pubkey *key = p->key;
-			DBG(DBG_CONTROL, {
-				char printkid[IDTOA_BUF];
-				idtoa(&key->id, printkid, IDTOA_BUF);
-				char thatid[IDTOA_BUF];
-				idtoa(&c->spd.that.id, thatid, IDTOA_BUF);
-				DBG_log("checking ECDSA keyid '%s' for match with '%s'",
-					printkid, thatid);
-			});
-
-			int pl;	/* value ignored */
-
-			if (key->alg == PUBKEY_ALG_ECDSA &&
-		//	    same_id(&c->spd.that.id, &key->id) &&
-			    trusted_ca_nss(key->issuer, c->spd.that.ca, &pl))
-			{
-				DBG(DBG_CONTROL, {
-					char buf[IDTOA_BUF];
-					dntoa_or_null(buf, IDTOA_BUF,
-						key->issuer, "%any");
-					DBG_log("key issuer CA is '%s'", buf);
-				});
-
-				/* check if found public key has expired */
-				if (!is_realtime_epoch(key->until_time) &&
-				    realbefore(key->until_time, nw))
-				{
-					loglog(RC_LOG_SERIOUS,
-					       "cached ECDSA public key has expired and has been deleted");
-					*pp = free_public_keyentry(p);
-					continue; /* continue with next public key */
-				}
-
-				if (take_a_crack_ECDSA(&s, key, "preloaded key")) {
-					loglog(RC_LOG_SERIOUS, "Authenticated using ECDSA");
-					return STF_OK;
-				}
-			}
-			pp = &p->next;
-		}
+	if (s.best_ugh == NULL) {
+		loglog(RC_LOG_SERIOUS,
+		       "no %s public key known for '%s'",
+		       type->name, id_str.buf);
+		/* ??? is this the best code there is? */
+		return STF_FAIL + INVALID_KEY_INFORMATION;
 	}
 
-	/* if no key was found (evidenced by best_ugh == NULL)
-	 * and that side of connection is key_from_DNS_on_demand
-	 * then go search DNS for keys for peer.
-	 */
-	/* To be re-implemented */
-
-	/* no acceptable key was found: diagnose */
-	{
-		char id_buf[IDTOA_BUF]; /* arbitrary limit on length of ID reported */
-
-		(void) idtoa(&st->st_connection->spd.that.id, id_buf,
-			     sizeof(id_buf));
-
-		if (s.best_ugh == NULL) {
-				loglog(RC_LOG_SERIOUS,
-				       "no ECDSA public key known for '%s'",
-				       id_buf);
-
-			/* ??? is this the best code there is? */
-			return STF_FAIL + INVALID_KEY_INFORMATION;
-		}
-
-		if (s.best_ugh[0] == '9') {
-			loglog(RC_LOG_SERIOUS, "%s", s.best_ugh + 1);
-			/* XXX Could send notification back */
-			return STF_FAIL + INVALID_HASH_INFORMATION;
-		} else {
-			if (s.tried_cnt == 1) {
-				loglog(RC_LOG_SERIOUS,
-				       "ECDSA Signature check (on %s) failed (wrong key?); tried%s",
-				       id_buf, s.tried);
-				DBG(DBG_CONTROL,
-				    DBG_log("public key for %s failed: decrypted SIG payload into a malformed ECB (%s)",
-					    id_buf, s.best_ugh + 1));
-			} else {
-				loglog(RC_LOG_SERIOUS,
-				       "ECDSA Signature check (on %s) failed: tried%s keys but none worked.",
-				       id_buf, s.tried);
-				DBG(DBG_CONTROL,
-				    DBG_log("all %d public keys for %s failed: best decrypted SIG payload into a malformed ECB (%s)",
-					    s.tried_cnt, id_buf,
-					    s.best_ugh + 1));
-			}
-			return STF_FAIL + INVALID_KEY_INFORMATION;
-		}
+	if (s.best_ugh[0] == '9') {
+		loglog(RC_LOG_SERIOUS, "%s", s.best_ugh + 1);
+		/* XXX Could send notification back */
+		return STF_FAIL + INVALID_HASH_INFORMATION;
 	}
+
+	if (s.tried_cnt == 1) {
+		loglog(RC_LOG_SERIOUS,
+		       "%s Signature check (on %s) failed (wrong key?); tried%s",
+		       type->name, id_str.buf, s.tried);
+	} else {
+		loglog(RC_LOG_SERIOUS,
+		       "%s Signature check (on %s) failed: tried%s keys but none worked.",
+		       type->name, id_str.buf, s.tried);
+	}
+	dbg("all %d %s public keys for %s failed: best decrypted SIG payload into a malformed ECB (%s)",
+	    s.tried_cnt, type->name, id_str.buf, s.best_ugh+1/*skip '9'*/);
+
+	return STF_FAIL + INVALID_KEY_INFORMATION;
 }
 
 /*
@@ -918,24 +743,20 @@ static struct secret *lsw_get_secret(const struct connection *c,
 				     enum PrivateKeyKind kind,
 				     bool asym)
 {
-	const struct id *my_id = &c->spd.this.id;
-	const struct id *his_id = &c->spd.that.id;
-
-	char idme[IDTOA_BUF];
-	char idhim[IDTOA_BUF];
-
-	idtoa(my_id, idme,  IDTOA_BUF);
-	idtoa(his_id, idhim, IDTOA_BUF);
-
-	DBG(DBG_CONTROL,
-	    DBG_log("started looking for secret for %s->%s of kind %s",
-		    idme, idhim,
-		    enum_name(&pkk_names, kind)));
-
 	/* is there a certificate assigned to this connection? */
 	if ((kind == PKK_ECDSA || kind == PKK_RSA) &&
 	    c->spd.this.cert.ty == CERT_X509_SIGNATURE &&
 	    c->spd.this.cert.u.nss_cert != NULL) {
+
+		if (DBGP(DBG_BASE)) {
+			id_buf this_buf, that_buf;
+			DBG_log("%s() using certificate for %s->%s of kind %s",
+				__func__,
+				str_id(&c->spd.this.id, &this_buf),
+				str_id(&c->spd.that.id, &that_buf),
+				enum_name(&pkk_names, kind));
+		}
+
 		/* from here on: must free my_public_key */
 		struct pubkey *my_public_key;
 		switch (kind) {
@@ -950,9 +771,7 @@ static struct secret *lsw_get_secret(const struct connection *c,
 		}
 
 		if (my_public_key == NULL) {
-			loglog(RC_LOG_SERIOUS, "Private key not found (missing or token locked?");
-			/* XXX: ??? */
-			free_public_key(my_public_key);
+			loglog(RC_LOG_SERIOUS, "private key not found (certificate missing from NSS DB or token locked?)");
 			return NULL;
 		}
 
@@ -961,15 +780,15 @@ static struct secret *lsw_get_secret(const struct connection *c,
 		if (best == NULL) {
 			const char *nickname = cert_nickname(&c->spd.this.cert);
 			DBG(DBG_CONTROL,
-			    DBG_log("private key for cert %s not found in local cache; loading from NSS DB",
-				    nickname));
+			    DBG_log("%s() private key for cert %s not found in local cache; loading from NSS DB",
+				    __func__, nickname));
 
 			err_t err = load_nss_cert_secret(c->spd.this.cert.u.nss_cert);
 			if (err != NULL) {
 				/* ??? should this be logged? */
 				DBG(DBG_CONTROL,
-				    DBG_log("private key for cert %s not found in NSS DB (%s)",
-					    nickname, err));
+				    DBG_log("%s() private key for cert %s not found in NSS DB (%s)",
+					    __func__, nickname, err));
 			} else {
 				best = lsw_find_secret_by_public_key(pluto_secrets,
 								     my_public_key, kind);
@@ -983,9 +802,11 @@ static struct secret *lsw_get_secret(const struct connection *c,
 		return best;
 	}
 
-	/* under certain conditions, override his_id to %ANYADDR */
+	/* under certain conditions, override that_id to %ANYADDR */
 
 	struct id rw_id;
+	const struct id *const this_id = &c->spd.this.id;
+	const struct id *that_id = &c->spd.that.id; /* can change */
 
 	if (
 	    /* case 1: */
@@ -1002,36 +823,38 @@ static struct secret *lsw_get_secret(const struct connection *c,
 		  id_is_ipaddr(&c->spd.that.id) &&
 		  /* Check if we are a road warrior instantiation, not a vnet: instantiation */
 		  isanyaddr(&c->spd.that.host_addr) ) ) )
-	) {
-		/* roadwarrior: replace him with %ANYADDR */
-		DBG(DBG_CONTROL,
-		    DBG_log("instantiating him to %%ANYADDR"));
-
+		) {
+		/* roadwarrior: replace that with %ANYADDR */
 		rw_id.kind = addrtypeof(&c->spd.that.host_addr) == AF_INET ?
 			     ID_IPV4_ADDR : ID_IPV6_ADDR;
-		happy(anyaddr(addrtypeof(&c->spd.that.host_addr),
-			      &rw_id.ip_addr));
-		his_id = &rw_id;
+		rw_id.ip_addr = address_any(address_type(&c->spd.that.host_addr));
+		if (DBGP(DBG_BASE)) {
+			id_buf old_buf, new_buf;
+			DBG_log("%s() switching remote roadwarrier ID from %s to %s (%%ANYADDR)",
+				__func__, str_id(that_id, &old_buf), str_id(&rw_id, &new_buf));
+		}
+		that_id = &rw_id;
+
 	}
 
-	char idhim_revised[IDTOA_BUF];
-	idtoa(his_id, idhim_revised, IDTOA_BUF);
-
-	DBG(DBG_CONTROL,
-	    DBG_log("actually looking for secret for %s->%s of kind %s",
-		    idme, idhim_revised,
-		    enum_name(&pkk_names, kind)));
+	if (DBGP(DBG_BASE)) {
+		id_buf this_buf, that_buf;
+		DBG_log("%s() using IDs for %s->%s of kind %s",
+			__func__,
+			str_id(this_id, &this_buf),
+			str_id(that_id, &that_buf),
+			enum_name(&pkk_names, kind));
+	}
 
 	return lsw_find_secret_by_id(pluto_secrets,
 				     kind,
-				     my_id, his_id, asym);
+				     this_id, that_id, asym);
 }
 
 /*
  * find the struct secret associated with an XAUTH username.
  */
-struct secret *lsw_get_xauthsecret(const struct connection *c UNUSED,
-				   char *xauthname)
+struct secret *lsw_get_xauthsecret(char *xauthname)
 {
 	struct secret *best = NULL;
 
@@ -1079,7 +902,7 @@ const chunk_t *get_psk(const struct connection *c)
 
 	if (psk != NULL) {
 		DBG(DBG_PRIVATE, {
-			DBG_dump_chunk("PreShared Key", *psk);
+			DBG_dump_hunk("PreShared Key", *psk);
 		});
 	} else {
 		DBG(DBG_CONTROL, DBG_log("no PreShared Key Found"));
@@ -1103,8 +926,8 @@ chunk_t *get_ppk(const struct connection *c, chunk_t **ppk_id)
 	*ppk_id = &pks->ppk_id;
 	DBG(DBG_PRIVATE, {
 		DBG_log("Found PPK");
-		DBG_dump_chunk("PPK_ID:", **ppk_id);
-		DBG_dump_chunk("PPK:", pks->ppk);
+		DBG_dump_hunk("PPK_ID:", **ppk_id);
+		DBG_dump_hunk("PPK:", pks->ppk);
 		});
 	return &pks->ppk;
 }
@@ -1120,8 +943,8 @@ const chunk_t *get_ppk_by_id(const chunk_t *ppk_id)
 	if (s != NULL) {
 		const struct private_key_stuff *pks = lsw_get_pks(s);
 		DBG(DBG_PRIVATE, {
-			DBG_dump_chunk("Found PPK:", pks->ppk);
-			DBG_dump_chunk("with PPK_ID:", *ppk_id);
+			DBG_dump_hunk("Found PPK:", pks->ppk);
+			DBG_dump_hunk("with PPK_ID:", *ppk_id);
 		});
 		return &pks->ppk;
 	}
@@ -1132,43 +955,24 @@ const chunk_t *get_ppk_by_id(const chunk_t *ppk_id)
 }
 
 /*
- * find the appropriate RSA private key (see get_secret).
- * Failure is indicated by a NULL pointer.
+ * Find the appropriate private key (see get_secret).  Failure is
+ * indicated by a NULL pointer.
  */
-const struct RSA_private_key *get_RSA_private_key(const struct connection *c)
+
+const struct private_key_stuff *get_connection_private_key(const struct connection *c,
+							   const struct pubkey_type *type)
 {
-	struct secret *s = lsw_get_secret(c, PKK_RSA, TRUE);
-	const struct RSA_private_key *RSA_pk =
-		s == NULL ? NULL : &lsw_get_pks(s)->u.RSA_private_key;
+	struct secret *s = lsw_get_secret(c, type->private_key_kind, TRUE);
+	if (s == NULL) {
+		dbg("no %s private key Found", type->name);
+		return NULL;
+	}
 
-	DBG(DBG_CRYPT, {
-		if (RSA_pk == NULL)
-			DBG_log("no RSA key Found");
-		else
-			DBG_log("RSA key %s found",
-				RSA_pk->pub.keyid);
-	});
-	return RSA_pk;
-}
+	const struct private_key_stuff *pks = lsw_get_pks(s);
+	passert(pks != NULL);
 
-/*
- * find the appropriate ECDSA private key (see get_secret).
- * Failure is indicated by a NULL pointer.
- */
-const struct ECDSA_private_key *get_ECDSA_private_key(const struct connection *c)
-{
-	struct secret *s = lsw_get_secret(c, PKK_ECDSA, TRUE);
-	const struct ECDSA_private_key *ECDSA_pk =
-		s == NULL ? NULL : &lsw_get_pks(s)->u.ECDSA_private_key;
-
-	DBG(DBG_CRYPT, {
-		if (ECDSA_pk == NULL)
-			DBG_log("no ECDSA key Found");
-		else
-			DBG_log("ECDSA key %s found",
-				ECDSA_pk->pub.keyid);
-	});
-	return ECDSA_pk;
+	dbg("%s private key found", type->name);
+	return pks;
 }
 
 /*
@@ -1186,90 +990,42 @@ void free_remembered_public_keys(void)
 
 err_t add_public_key(const struct id *id, /* ASKK */
 		     enum dns_auth_level dns_auth_level,
-		     enum pubkey_alg alg,
+		     const struct pubkey_type *type,
 		     const chunk_t *key,
 		     struct pubkey_list **head)
 {
 	struct pubkey *pk = alloc_thing(struct pubkey, "pubkey");
 
 	/* first: algorithm-specific decoding of key chunk */
-	switch (alg) {
-	case PUBKEY_ALG_RSA:
-	{
-		err_t ugh = unpack_RSA_public_key(&pk->u.rsa, key);
-
-		if (ugh != NULL) {
-			pfree(pk);
-			return ugh;
-		}
-	}
-	break;
-	case PUBKEY_ALG_ECDSA:
-	{
-		err_t ugh = unpack_ECDSA_public_key(&pk->u.ecdsa, key);
-
-		if (ugh != NULL) {
-			pfree(pk);
-			return ugh;
-		}
-	}
-	break;
-	default:
-		bad_case(alg);
-	}
-
+	type->unpack_pubkey_content(&pk->u, *key);
 	pk->id = *id;
 	pk->dns_auth_level = dns_auth_level;
-	pk->alg = alg;
+	pk->type = type;
 	pk->until_time = realtime_epoch;
-	pk->issuer = empty_chunk;
+	pk->issuer = EMPTY_CHUNK;
 
 	install_public_key(pk, head);
 	return NULL;
 }
 
 err_t add_ipseckey(const struct id *id,
-		     enum dns_auth_level dns_auth_level,
-		     enum pubkey_alg alg,
-		     uint32_t ttl, uint32_t ttl_used,
-		     const chunk_t *key,
-		     struct pubkey_list **head)
+		   enum dns_auth_level dns_auth_level,
+		   const struct pubkey_type *type,
+		   uint32_t ttl, uint32_t ttl_used,
+		   const chunk_t *key,
+		   struct pubkey_list **head)
 {
 	struct pubkey *pk = alloc_thing(struct pubkey, "ipseckey publickey");
 
 	/* first: algorithm-specific decoding of key chunk */
-	switch (alg) {
-	case PUBKEY_ALG_RSA:
-	{
-		err_t ugh = unpack_RSA_public_key(&pk->u.rsa, key);
-
-		if (ugh != NULL) {
-			pfree(pk);
-			return ugh;
-		}
-	}
-	break;
-	case PUBKEY_ALG_ECDSA:
-	{
-		err_t ugh = unpack_ECDSA_public_key(&pk->u.ecdsa, key);
-
-		if (ugh != NULL) {
-			pfree(pk);
-			return ugh;
-		}
-	}
-	break;
-	default:
-		bad_case(alg);
-	}
-
+	type->unpack_pubkey_content(&pk->u, *key);
 	pk->dns_ttl = ttl;
 	pk->installed_time = realnow();
 	pk->until_time = realtimesum(pk->installed_time, deltatime(ttl_used));
 	pk->id = *id;
 	pk->dns_auth_level = dns_auth_level;
-	pk->alg = alg;
-	pk->issuer = empty_chunk; /* ipseckey has no issuer */
+	pk->type = type;
+	pk->issuer = EMPTY_CHUNK; /* ipseckey has no issuer */
 
 	install_public_key(pk, head);
 	return NULL;
@@ -1291,7 +1047,7 @@ void list_public_keys(bool utc, bool check_pub_keys)
 	while (p != NULL) {
 		struct pubkey *key = p->key;
 
-		switch (key->alg) {
+		switch (key->type->alg) {
 		case PUBKEY_ALG_RSA:
 		case PUBKEY_ALG_ECDSA:
 		{
@@ -1301,14 +1057,10 @@ void list_public_keys(bool utc, bool check_pub_keys)
 
 			if (!check_pub_keys ||
 			    !startswith(check_expiry_msg, "ok")) {
-				char id_buf[IDTOA_BUF];
-
-				idtoa(&key->id, id_buf, IDTOA_BUF);
-
 				LSWLOG_WHACK(RC_COMMENT, buf) {
 					lswlog_realtime(buf, key->installed_time, utc);
 					lswlogs(buf, ", ");
-					switch (key->alg) {
+					switch (key->type->alg) {
 					case PUBKEY_ALG_RSA:
 						lswlogf(buf, "%4d RSA Key %s",
 							8 * key->u.rsa.k,
@@ -1320,7 +1072,7 @@ void list_public_keys(bool utc, bool check_pub_keys)
 							key->u.ecdsa.keyid);
 						break;
 					default:
-						bad_case(key->alg);
+						bad_case(key->type->alg);
 					}
 					lswlogf(buf, " (%s private key), until ",
 						(has_private_rawkey(key) ? "has" : "no"));
@@ -1329,21 +1081,24 @@ void list_public_keys(bool utc, bool check_pub_keys)
 				}
 
 				/* XXX could be ikev2_idtype_names */
+				id_buf idb;
+
 				whack_log(RC_COMMENT, "       %s '%s'",
-					  enum_show(&ike_idtype_names,
-						    key->id.kind), id_buf);
+					enum_show(&ike_idtype_names,
+						    key->id.kind),
+					str_id(&key->id, &idb));
 
 				if (key->issuer.len > 0) {
-					dntoa(id_buf, IDTOA_BUF, key->issuer);
+					dn_buf b;
 					whack_log(RC_COMMENT,
 						  "       Issuer '%s'",
-						  id_buf);
+						  str_dn(key->issuer, &b));
 				}
 			}
 			break;
 		}
 		default:
-			dbg("ignoring key with unsupported alg %d", key->alg);
+			dbg("ignoring key with unsupported alg %d", key->type->alg);
 		}
 		p = p->next;
 	}
@@ -1409,7 +1164,7 @@ struct pubkey *get_pubkey_with_matching_ckaid(const char *ckaid)
 	for (p = pluto_pubkeys; p != NULL; p = p->next) {
 		DBG_log("looking at a PUBKEY");
 		struct pubkey *key = p->key;
-		switch (key->alg) {
+		switch (key->type->alg) {
 		case PUBKEY_ALG_RSA: {
 			if (rsa_pubkey_ckaid_matches(key, bin, binlen)) {
 				dbg("ckaid matching pubkey");

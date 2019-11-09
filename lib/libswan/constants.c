@@ -5,6 +5,7 @@
  * Copyright (C) 1998-2002,2015  D. Hugh Redelmeier.
  * Copyright (C) 2016-2017 Andrew Cagney
  * Copyright (C) 2017 Vukasin Karadzic <vukasin.karadzic@gmail.com>
+ * Copyright (C) 2019 Andrew Cagney <cagney@gnu.org>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -28,7 +29,6 @@
 #include <limits.h>
 #include <netinet/in.h>
 
-#include <libreswan.h>
 #include <ietf_constants.h>
 #include <libreswan/passert.h>
 
@@ -193,6 +193,7 @@ enum_names doi_names = {
 
 /* kind of struct connection */
 static const char *const connection_kind_name[] = {
+	"CK_INVALID",
 	"CK_GROUP",	/* policy group: instantiates to template */
 	"CK_TEMPLATE",	/* abstract connection, with wildcard */
 	"CK_PERMANENT",	/* normal connection */
@@ -201,7 +202,7 @@ static const char *const connection_kind_name[] = {
 };
 
 enum_names connection_kind_names = {
-	CK_GROUP,
+	CK_INVALID,
 	CK_GOING_AWAY,
 	ARRAY_REF(connection_kind_name),
 	NULL, /* prefix */
@@ -340,6 +341,15 @@ enum_names payload_names_ikev1orv2 = {
 	&payload_names_ikev2copy_main
 };
 
+static enum_names *const payload_type_names_table[] = {
+	[IKEv1 - IKEv1] = &ikev1_payload_names,
+	[IKEv2 - IKEv1] = &ikev2_payload_names,
+};
+
+enum_enum_names payload_type_names = {
+	IKEv1, IKEv2,
+	ARRAY_REF(payload_type_names_table)
+};
 
 static const char *const ikev2_last_proposal_names[] = {
 	"v2_PROPOSAL_LAST",
@@ -428,7 +438,7 @@ enum_names ikev1_exchange_names = {
 	ISAKMP_XCHG_NONE,
 	ISAKMP_XCHG_MODE_CFG,
 	ARRAY_REF(exchange_name_ikev1),
-	NULL, /* prefix */
+	"ISAKMP_XCHG_", /* prefix */
 	&exchange_names_doi
 };
 
@@ -454,6 +464,16 @@ enum_names exchange_names_ikev1orv2 = {
 	ARRAY_REF(exchange_name_ikev1),
 	NULL, /* prefix */
 	&exchange_names_doi_and_v2
+};
+
+static enum_names *const exchange_type_names_table[] = {
+	[IKEv1 - IKEv1] = &ikev1_exchange_names,
+	[IKEv2 - IKEv1] = &ikev2_exchange_names,
+};
+
+enum_enum_names exchange_type_names = {
+	IKEv1, IKEv2,
+	ARRAY_REF(exchange_type_names_table),
 };
 
 /* Flag BITS */
@@ -656,6 +676,28 @@ enum_names ipcomp_transformid_names = {
 	IPCOMP_LZJH,
 	ARRAY_REF(ipcomp_transform_name),
 	NULL, /* prefix */
+	NULL
+};
+
+/*
+ * IANA IKEv2 Hash Algorithms
+ * https://www.iana.org/assignments/ikev2-parameters/ikev2-parameters.xhtml#hash-algorithms
+ */
+static const char *const notify_hash_algo_name[] = {
+        "IKEv2_AUTH_HASH_RESERVED",
+        "IKEv2_AUTH_HASH_SHA1",
+        "IKEv2_AUTH_HASH_SHA2_256",
+        "IKEv2_AUTH_HASH_SHA2_384",
+        "IKEv2_AUTH_HASH_SHA2_512",
+        "IKEv2_AUTH_HASH_IDENTITY"
+	/* 6-1023 Unassigned */
+};
+
+enum_names notify_hash_algo_names = {
+	IKEv2_AUTH_HASH_RESERVED,
+	IKEv2_AUTH_HASH_IDENTITY,
+	ARRAY_REF(notify_hash_algo_name),
+	"IKEv2_AUTH_HASH_", /* prefix */
 	NULL
 };
 
@@ -2245,13 +2287,9 @@ const char *strip_prefix(const char *s, const char *prefix)
  */
 int enum_search(enum_names *ed, const char *str)
 {
-	enum_names  *p;
-
-	for (p = ed; p != NULL; p = p->en_next_range) {
-		unsigned long en;
-
+	for (enum_names *p = ed; p != NULL; p = p->en_next_range) {
 		passert(p->en_last - p->en_first + 1 == p->en_checklen);
-		for (en = p->en_first; en <= p->en_last; en++) {
+		for (unsigned long en = p->en_first; en <= p->en_last; en++) {
 			const char *ptr = p->en_names[en - p->en_first];
 
 			if (ptr != NULL && strcaseeq(ptr, str)) {
@@ -2265,13 +2303,9 @@ int enum_search(enum_names *ed, const char *str)
 
 int enum_match(enum_names *ed, shunk_t string)
 {
-	enum_names  *p;
-
-	for (p = ed; p != NULL; p = p->en_next_range) {
-		unsigned long en;
-
+	for (enum_names *p = ed; p != NULL; p = p->en_next_range) {
 		passert(p->en_last - p->en_first + 1 == p->en_checklen);
-		for (en = p->en_first; en <= p->en_last; en++) {
+		for (unsigned long en = p->en_first; en <= p->en_last; en++) {
 			const char *name = p->en_names[en - p->en_first];
 
 			if (name == NULL) {
@@ -2281,42 +2315,36 @@ int enum_match(enum_names *ed, shunk_t string)
 			passert(en <= INT_MAX);
 
 			/*
--			 * Try matching the entire name including any
--			 * prefix.  If needed, ignore any trailing
--			 * '(...)'
+			 * try matching all four variants of name:
+			 * with and without prefix en->en_prefix and
+			 * with and without suffix '(...)'
 			 */
-			if (strlen(name) == string.len &&
-			    strncaseeq(name, string.ptr, string.len)) {
-				return en;
-			}
-			if (strcspn(name, "(") == string.len &&
-			    name[strlen(name) - 1] == ')' &&
-			    strncaseeq(name, string.ptr, string.len)) {
-				return en;
-			}
+			size_t name_len = strlen(name);
 
-			/*
-			 * Try matching the name minus any prefix.  If
-			 * needed, ignore any trailing '(...)'.
-			 */
-			if (ed->en_prefix == NULL) {
-				continue;
-			}
-			const char *short_name = strip_prefix(name, ed->en_prefix);
-			if (short_name == name) {
-				continue;
-			}
+			/* pl: prefix length */
+			size_t pl = ed->en_prefix == NULL ? 0 :
+				strip_prefix(name, ed->en_prefix) - name;
 
-			if (strlen(short_name) == string.len &&
-			    strncaseeq(short_name, string.ptr, string.len)) {
+			/* suffix must not and will not overlap prefix */
+			const char *suffix = strchr(name + pl, '(');
+
+			/* sl: suffix length */
+			size_t sl = suffix != NULL && name[name_len - 1] == ')' ?
+				&name[name_len] - suffix : 0;
+
+#			define try(guard, f, b) ( \
+				(guard) && \
+				name_len - ((f) + (b)) == string.len && \
+				strncaseeq(name + (f), string.ptr, string.len))
+
+			if (try(true, 0, 0) ||
+			    try(sl > 0, 0, sl) ||
+			    try(pl > 0, pl, 0) ||
+			    try(pl > 0 && sl > 0, pl, sl))
+			{
 				return en;
 			}
-			if (strcspn(short_name, "(") == string.len &&
-			    short_name[strlen(short_name) - 1] == ')' &&
-			    strncaseeq(short_name, string.ptr, string.len)) {
-				return en;
-			}
-
+#			undef try
 		}
 	}
 	return -1;

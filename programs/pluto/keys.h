@@ -36,24 +36,23 @@ struct RSA_public_key;
 struct ECDSA_public_key;
 struct ECDSA_private_key;
 struct pubkey;
+struct pubkey_type;
 
 extern int sign_hash_RSA(const struct RSA_private_key *k, const u_char *hash_val,
 		      size_t hash_len, u_char *sig_val, size_t sig_len,
 		      enum notify_payload_hash_algorithms hash_algo);
 
 extern int sign_hash_ECDSA(const struct ECDSA_private_key *k, const u_char *hash_val,
-		      size_t hash_len, u_char *sig_val, size_t sig_len,
-		      enum notify_payload_hash_algorithms hash_algo);
+		      size_t hash_len, u_char *sig_val, size_t sig_len);
 
 extern err_t RSA_signature_verify_nss(const struct RSA_public_key *k,
 				      const u_char *hash_val, size_t hash_len,
 				      const u_char *sig_val, size_t sig_len,
 				      enum notify_payload_hash_algorithms hash_algo);
 
-extern const struct RSA_private_key *get_RSA_private_key(
-	const struct connection *c);
-extern const struct ECDSA_private_key *get_ECDSA_private_key(
-	const struct connection *c);
+
+const struct private_key_stuff *get_connection_private_key(const struct connection *c,
+							   const struct pubkey_type *type);
 
 extern bool has_private_key(cert_t cert);
 extern void list_public_keys(bool utc, bool check_pub_keys);
@@ -67,8 +66,7 @@ extern void load_preshared_secrets(void);
 extern void free_preshared_secrets(void);
 extern err_t load_nss_cert_secret(CERTCertificate *cert);
 
-extern struct secret *lsw_get_xauthsecret(const struct connection *c UNUSED,
-					  char *xauthname);
+extern struct secret *lsw_get_xauthsecret(char *xauthname);
 
 /* keys from ipsec.conf */
 extern struct pubkey_list *pluto_pubkeys;
@@ -76,31 +74,19 @@ extern struct pubkey_list *pluto_pubkeys;
 struct pubkey *get_pubkey_with_matching_ckaid(const char *ckaid);
 
 struct packet_byte_stream;
-extern stf_status RSA_check_signature_gen(struct state *st,
-					  const u_char hash_val[MAX_DIGEST_LEN],
-					  size_t hash_len,
-					  const struct packet_byte_stream *sig_pbs,
-					  enum notify_payload_hash_algorithms hash_algo,
-					  err_t (*try_RSA_signature)(
-						  const u_char hash_val[MAX_DIGEST_LEN],
-						  size_t hash_len,
-						  const struct packet_byte_stream *sig_pbs,
-						  struct pubkey *kr,
-						  struct state *st,
-						  enum notify_payload_hash_algorithms hash_algo));
-
-extern stf_status ECDSA_check_signature_gen(struct state *st,
-					  const u_char hash_val[MAX_DIGEST_LEN],
-					  size_t hash_len,
-					  const struct packet_byte_stream *sig_pbs,
-					  enum notify_payload_hash_algorithms hash_algo,
-					  err_t (*try_ECDSA_signature)(
-						  const u_char hash_val[MAX_DIGEST_LEN],
-						  size_t hash_len,
-						  const struct packet_byte_stream *sig_pbs,
-						  struct pubkey *kr,
-						  struct state *st,
-						  enum notify_payload_hash_algorithms hash_algo));
+extern stf_status check_signature_gen(struct state *st,
+				      const u_char hash_val[MAX_DIGEST_LEN],
+				      size_t hash_len,
+				      const struct packet_byte_stream *sig_pbs,
+				      enum notify_payload_hash_algorithms hash_algo,
+				      const struct pubkey_type *type,
+				      err_t (*try_signature)(
+					      const u_char hash_val[MAX_DIGEST_LEN],
+					      size_t hash_len,
+					      const struct packet_byte_stream *sig_pbs,
+					      struct pubkey *kr,
+					      struct state *st,
+					      enum notify_payload_hash_algorithms hash_algo));
 
 enum PrivateKeyKind nss_cert_key_kind(CERTCertificate *cert);
 

@@ -1,8 +1,8 @@
 /* tables of names for values defined in constants.h
  *
  * Copyright (C) 1998-2002,2013 D. Hugh Redelmeier <hugh@mimosa.com>
- * Copyright (C) 2013-2018 Paul Wouters <pwouters@redhat.com>
- * Copyright (C) 2015 Andrew Cagney <cagney@gnu.org>
+ * Copyright (C) 2013-2019 Paul Wouters <pwouters@redhat.com>
+ * Copyright (C) 2015-2019 Andrew Cagney <cagney@gnu.org>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -28,7 +28,6 @@
 #ifdef NETKEY_SUPPORT
 #include "linux/xfrm.h" /* local (if configured) or system copy */
 #endif
-#include <libreswan.h>
 #include <libreswan/passert.h>
 
 #include "constants.h"
@@ -127,11 +126,17 @@ static const char *const timer_event_name[] = {
 	E(EVENT_SD_WATCHDOG),
 	E(EVENT_PENDING_PHASE2),
 	E(EVENT_CHECK_CRLS),
+	E(EVENT_REVIVE_CONNS),
+	E(EVENT_FREE_ROOT_CERTS),
+	E(EVENT_RESET_LOG_RATE_LIMIT),
+	E(EVENT_PROCESS_KERNEL_QUEUE),
+
+	E(GLOBAL_TIMERS_ROOF),
 
 	E(EVENT_SO_DISCARD),
 	E(EVENT_RETRANSMIT),
 
-	[EVENT_SA_REKEY] = "EVENT_SA_REPLACE", /*E(EVENT_SA_REKEY),*/
+	E(EVENT_SA_REKEY),
 	E(EVENT_SA_REPLACE),
 	E(EVENT_SA_EXPIRE),
 
@@ -146,7 +151,6 @@ static const char *const timer_event_name[] = {
 	E(EVENT_v2_LIVENESS),
 	E(EVENT_v2_RELEASE_WHACK),
 	E(EVENT_v2_INITIATE_CHILD),
-	E(EVENT_v2_SEND_NEXT_IKE),
 	E(EVENT_v2_ADDR_CHANGE),
 	E(EVENT_v2_REDIRECT),
 	E(EVENT_RETAIN),
@@ -165,8 +169,6 @@ enum_names timer_event_names = {
 #define S(STATE) [STATE] = #STATE
 static const char *const state_name[] = {
 	S(STATE_UNDEFINED),
-	S(STATE_UNUSED_1),
-	S(STATE_UNUSED_2),
 	S(STATE_MAIN_R0),
 	S(STATE_MAIN_I1),
 	S(STATE_MAIN_R1),
@@ -241,8 +243,6 @@ enum_names state_names = {
 
 static const char *const state_story[] = {
 	[STATE_UNDEFINED] = "not defined and probably dead (internal)",
-	[STATE_UNUSED_1] = "STATE_UNUSED_1",
-	[STATE_UNUSED_2] = "STATE_UNUSED_2",
 	[STATE_MAIN_R0] = "expecting MI1",
 	[STATE_MAIN_I1] = "sent MI1, expecting MR1",
 	[STATE_MAIN_R1] = "sent MR1, expecting MI2",
@@ -355,23 +355,26 @@ enum_names routing_story = {
 	NULL };
 
 static const char *const stf_status_strings[] = {
-	"STF_IGNORE",
-	"STF_SUSPEND",
-	"STF_OK",
-	"STF_INTERNAL_ERROR",
-	"STF_FATAL",
-	"STF_DROP",
-	"STF_FAIL"
+#define A(S) [S] = #S
+	A(STF_SKIP_COMPLETE_STATE_TRANSITION),
+	A(STF_IGNORE),
+	A(STF_SUSPEND),
+	A(STF_OK),
+	A(STF_INTERNAL_ERROR),
+	A(STF_FATAL),
+	A(STF_FAIL),
+#undef A
 };
 
 enum_names stf_status_names = {
-	STF_IGNORE, STF_FAIL,
+	0, elemsof(stf_status_strings)-1,
 	ARRAY_REF(stf_status_strings),
 	NULL, /* prefix */
 	NULL
 };
 
-/* Names for sa_policy_bits.
+/*
+ * Names for sa_policy_bits.
  * Note: we drop the POLICY_ prefix so that logs are more concise.
  */
 const char *const sa_policy_bit_names[] = {
@@ -389,6 +392,7 @@ const char *const sa_policy_bit_names[] = {
 	"DECAP_DSCP",
 	"NOPMTUDISC",
 	"MSDH_DOWNGRADE",
+	"ALLOW_NO_SAN",
 	"DNS_MATCH_ID",
 	"SHA2_TRUNCBUG",
 	"SHUNT0",
@@ -424,6 +428,17 @@ const char *const sa_policy_bit_names[] = {
 	"PPK_INSIST",
 	"ESN_NO",
 	"ESN_YES",
+	"RSASIG_v1_5",
+	NULL	/* end for bitnamesof() */
+};
+
+/*
+ * Names for RFC 7427 IKEv2 AUTH signature hash algo sighash_policy_bits
+ */
+const char *const sighash_policy_bit_names[] = {
+	"SHA2_256",
+	"SHA2_384",
+	"SHA2_512",
 	NULL	/* end for bitnamesof() */
 };
 

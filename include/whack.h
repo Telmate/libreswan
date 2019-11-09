@@ -1,7 +1,7 @@
 /* Structure of messages from whack to Pluto proper.
  *
  * Copyright (C) 1998-2001,2015-2017 D. Hugh Redelmeier.
- * Copyright (C) 2012-2017 Paul Wouters <pwouters@redhat.com>
+ * Copyright (C) 2012-2019 Paul Wouters <pwouters@redhat.com>
  * Copyright (C) 2011 Mika Ilmaranta <ilmis@foobar.fi>
  * Copyright (C) 2012 Paul Wouters <paul@libreswan.org>
  * Copyright (C) 2012 Philippe Vouters <Philippe.Vouters@laposte.net>
@@ -63,7 +63,7 @@
  */
 
 #define WHACK_BASIC_MAGIC (((((('w' << 8) + 'h') << 8) + 'k') << 8) + 25)
-#define WHACK_MAGIC (((((('o' << 8) + 'h') << 8) + 'k') << 8) + 46)
+#define WHACK_MAGIC (((((('o' << 8) + 'h') << 8) + 'k') << 8) + 47)
 
 /*
  * Where, if any, is the pubkey coming from.
@@ -127,8 +127,6 @@ struct whack_end {
 enum whack_opt_set {
 	WHACK_ADJUSTOPTIONS=0,		/* normal case */
 	WHACK_SETDUMPDIR=1,		/* string1 contains new dumpdir */
-	WHACK_STARTWHACKRECORD=2,	/* string1 contains file to write options to */
-	WHACK_STOPWHACKRECORD=3,	/* turn off recording to file */
 };
 
 struct whack_message {
@@ -140,6 +138,7 @@ struct whack_message {
 	bool whack_traffic_status;
 	bool whack_shunt_status;
 	bool whack_fips_status;
+	bool whack_brief_status;
 	bool whack_seccomp_crashtest;
 
 	bool whack_shutdown;
@@ -303,6 +302,9 @@ struct whack_message {
 
 	/* for DDOS modes */
 	enum ddos_mode whack_ddos;
+
+	/* force EVENT_PENDING_DDNS */
+	bool whack_ddns;
 
 	/* for WHACK_CRASH - note if a remote peer is known to have rebooted */
 	bool whack_crash;

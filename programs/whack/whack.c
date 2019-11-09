@@ -7,14 +7,16 @@
  * Copyright (C) 2007-2008 Paul Wouters <paul@xelerance.com>
  * Copyright (C) 2008 Shingo Yamawaki
  * Copyright (C) 2008-2009 David McCullough <david_mccullough@securecomputing.com>
- * Copyright (C) 2010,2014 D. Hugh Redelmeier <hugh@mimosa.com>
+ * Copyright (C) 2010-2019 D. Hugh Redelmeier <hugh@mimosa.com>
  * Copyright (C) 2011 Mika Ilmaranta <ilmis@foobar.fi>
- * Copyright (C) 2012-2017 Paul Wouters <pwouters@redhat.com>
+ * Copyright (C) 2012-2019 Paul Wouters <pwouters@redhat.com>
  * Copyright (C) 2012 Philippe Vouters <philippe.vouters@laposte.net>
  * Copyright (C) 2013 David McCullough <ucdevel@gmail.com>
  * Copyright (C) 2013 Matt Rogers <mrogers@redhat.com>
  * Copyright (C) 2013-2018 Antony Antony <antony@phenome.org>
  * Copyright (C) 2017 Sahana Prasad <sahana.prasad07@gmail.com>
+ * Copyright (C) 2019 Andrew Cagney <cagney@gnu.org>
+ * Copyright (C) 2019 Tuomo Soini <tis@foobar.fi>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -53,6 +55,7 @@
 #include "defs.h"
 #include "whack.h"
 #include "ip_address.h"
+#include "ip_info.h"
 
 #include "ipsecconf/confread.h" /* for DEFAULT_UPDOWN */
 #include <net/if.h> /* for IFNAMSIZ */
@@ -83,7 +86,7 @@ static void help(void)
 		"	[--groups <access control groups>] \\\n"
 		"	[--cert <friendly_name> | --ckaid <ckaid>] \\\n"
 		"	[--ca <distinguished name>] \\\n"
-		"	[--sendca no|issuer|all] [--sendcert] \\\n"
+		"	[--sendca no|issuer|all] [--sendcert yes|always|no|never|ifasked] \\\n"
 		"	[--nexthop <ip-address>] \\\n"
 		"	[--client <subnet> \\\n"
 		"	[--clientprotoport <protocol>/<port>] \\\n"
@@ -92,13 +95,13 @@ static void help(void)
 		"		[--rsa-sha2_384 ] | [--rsa-sha2_512 ] | [ --auth-null] | \\\n"
 		"		[--auth-never] \\\n"
 		"	[--encrypt] [--authenticate] [--compress] [--sha2-truncbug] \\\n"
-		"	[--msdh-downgrade] \\\n"
-		"	[--overlapip] [--tunnel] [--pfs] [--dns-match-id] \\\n"
+		"	[--ms-dh-downgrade] \\\n"
+		"	[--overlapip] [--tunnel] [--pfs] [--dns-match-id] [--allow-cert-without-san-id]\\\n"
 		"	[--pfsgroup modp1024 | modp1536 | modp2048 | \\\n"
 		"		modp3072 | modp4096 | modp6144 | modp8192 \\\n"
 		"		dh22 | dh23 | dh24] \\\n"
 		"	[--ikelifetime <seconds>] [--ipseclifetime <seconds>] \\\n"
-		"	[--reykeymargin <seconds>] [--reykeyfuzz <percentage>] \\\n"
+		"	[--rekeymargin <seconds>] [--rekeyfuzz <percentage>] \\\n"
 		"	[--retransmit-timeout <seconds>] \\\n"
 		"	[--retransmit-interval <msecs>] \\\n"
 		"	[--send-redirect] [--redirect-to] \\\n"
@@ -124,7 +127,7 @@ static void help(void)
 		"	[--dontrekey] [--aggressive] \\\n"
 		"	[--initialcontact] [--cisco-unity] [--fake-strongswan] \\\n"
 		"	[--encaps <auto|yes|no>] [--no-nat-keepalive] \\\n"
-		"	[--ikev1-natt <both|rfc|drafts> \\\n"
+		"	[--ikev1-natt <both|rfc|drafts>] [--no-nat_keepalive] \\\n"
 		"	[--dpddelay <seconds> --dpdtimeout <seconds>] \\\n"
 		"	[--dpdaction (clear|hold|restart)] \\\n"
 		"	[--xauthserver | --xauthclient] \\\n"
@@ -141,6 +144,8 @@ static void help(void)
 		"	[--initiateontraffic | --pass | --drop | --reject] \\\n"
 		"	[--failnone | --failpass | --faildrop | --failreject] \\\n"
 		"	[--negopass ] \\\n"
+		"	[--donotrekey ] [--reauth ] \\\n"
+		"	[--disablearrivalcheck ] \\\n"
 		"	[--nic-offload ] \\\n"
 		"	--to\n"
 		"\n"
@@ -169,11 +174,10 @@ static void help(void)
 		"pubkey: whack --keyid <id> [--addkey] [--pubkeyrsa <key>]\n"
 		"\n"
 		"debug: whack [--name <connection_name>] \\\n"
-		"	[--debug-none] | [--debug-all] | \\\n"
-		"	[--debug <class>] | [--debug private] \\\n"
-		"	[--debug list]\n"
-		"\n"
-		"testcases: [--whackrecord <file>] [--whackstoprecord]\n"
+		"	[--debug help|none|<class>] \\\n"
+		"	[--no-debug <class>] \\\n"
+		"	[--impair help|list|none|<behaviour>]  \\\n"
+		"	[--no-impair <behaviour>]\n"
 		"\n"
 		"listen: whack (--listen | --unlisten)\n"
 		"\n"
@@ -191,10 +195,12 @@ static void help(void)
 		"reread: whack [--rereadsecrets] [--fetchcrls] [--rereadall]\n"
 		"\n"
 		"status: whack [--status] | [--trafficstatus] | [--globalstatus] | \\\n"
-		"	[--clearstats] | [--shuntstatus] | [--fipsstatus]\n"
+		"	[--clearstats] | [--shuntstatus] | [--fipsstatus] | [--briefstatus] \n"
+		"\n"
+		"refresh dns: whack --ddns\n"
 		"\n"
 #ifdef HAVE_SECCOMP
-		"status: whack --seccomp-crashtest (CAREFUL!)\n"
+		"testing: whack --seccomp-crashtest (CAREFUL!)\n"
 		"\n"
 #endif
 		"shutdown: whack --shutdown\n"
@@ -302,6 +308,8 @@ enum option_enums {
 	OPT_DDOS_UNLIMITED,
 	OPT_DDOS_AUTO,
 
+	OPT_DDNS,
+
 	OPT_REREADSECRETS,
 	OPT_REREADCRLS,
 	OPT_FETCHCRLS,
@@ -316,6 +324,7 @@ enum option_enums {
 	OPT_TRAFFIC_STATUS,
 	OPT_SHUNT_STATUS,
 	OPT_FIPS_STATUS,
+	OPT_BRIEF_STATUS,
 
 #ifdef HAVE_SECCOMP
 	OPT_SECCOMP_CRASHTEST,
@@ -335,10 +344,8 @@ enum option_enums {
 	OPT_DELETECRASH,
 	OPT_USERNAME,
 	OPT_XAUTHPASS,
-	OPT_WHACKRECORD,
-	OPT_WHACKSTOPRECORD,
 
-#define OPT_LAST2 OPT_WHACKSTOPRECORD	/* last "normal" option, range 2 */
+#define OPT_LAST2 OPT_XAUTHPASS	/* last "normal" option, range 2 */
 
 /* List options */
 
@@ -483,6 +490,7 @@ enum option_enums {
 	DBGOPT_ALL,
 
 	DBGOPT_DEBUG,
+	DBGOPT_NO_DEBUG,
 	DBGOPT_IMPAIR,
 	DBGOPT_NO_IMPAIR,
 
@@ -544,6 +552,8 @@ static const struct option long_opts[] = {
 	{ "ddos-unlimited", no_argument, NULL, OPT_DDOS_UNLIMITED + OO },
 	{ "ddos-auto", no_argument, NULL, OPT_DDOS_AUTO + OO },
 
+	{ "ddns", no_argument, NULL, OPT_DDNS + OO },
+
 	{ "rereadsecrets", no_argument, NULL, OPT_REREADSECRETS + OO },
 	{ "rereadcrls", no_argument, NULL, OPT_REREADCRLS + OO }, /* obsolete */
 	{ "fetchcrls", no_argument, NULL, OPT_FETCHCRLS + OO },
@@ -557,6 +567,7 @@ static const struct option long_opts[] = {
 	{ "trafficstatus", no_argument, NULL, OPT_TRAFFIC_STATUS + OO },
 	{ "shuntstatus", no_argument, NULL, OPT_SHUNT_STATUS + OO },
 	{ "fipsstatus", no_argument, NULL, OPT_FIPS_STATUS + OO },
+	{ "briefstatus", no_argument, NULL, OPT_BRIEF_STATUS + OO },
 #ifdef HAVE_SECCOMP
 	{ "seccomp-crashtest", no_argument, NULL, OPT_SECCOMP_CRASHTEST + OO },
 #endif
@@ -625,8 +636,9 @@ static const struct option long_opts[] = {
 	{ "tunnelipv4", no_argument, NULL, CD_TUNNELIPV4 + OO },
 	{ "tunnelipv6", no_argument, NULL, CD_TUNNELIPV6 + OO },
 	PS("pfs", PFS),
-	PS("msdh-downgrade", MSDH_DOWNGRADE),
+	PS("ms-dh-downgrade", MSDH_DOWNGRADE),
 	PS("dns-match-id", DNS_MATCH_ID),
+	PS("allow-cert-without-san-id", ALLOW_NO_SAN),
 	PS("sha2-truncbug", SHA2_TRUNCBUG),
 	PS("sha2_truncbug", SHA2_TRUNCBUG), /* backwards compatibility */
 	PS("aggressive", AGGRESSIVE),
@@ -654,16 +666,17 @@ static const struct option long_opts[] = {
 
 	PS("negopass", NEGO_PASS),
 	PS("dontrekey", DONT_REKEY),
+	PS("reauth", REAUTH),
 	{ "forceencaps", no_argument, NULL, CD_FORCEENCAPS + OO }, /* backwards compatibility */
 	{ "encaps", required_argument, NULL, CD_ENCAPS + OO },
-	{ "no-nat_keepalive", no_argument, NULL,  CD_NO_NAT_KEEPALIVE },
+	{ "no-nat_keepalive", no_argument, NULL,  CD_NO_NAT_KEEPALIVE + OO },
 	{ "ikev1_natt", required_argument, NULL, CD_IKEV1_NATT + OO },	/* obsolete _ */
 	{ "ikev1-natt", required_argument, NULL, CD_IKEV1_NATT + OO },
-	{ "initialcontact", no_argument, NULL,  CD_INITIAL_CONTACT },
-	{ "cisco_unity", no_argument, NULL, CD_CISCO_UNITY },	/* obsolete _ */
-	{ "cisco-unity", no_argument, NULL, CD_CISCO_UNITY },
-	{ "fake-strongswan", no_argument, NULL, CD_FAKE_STRONGSWAN },
-	{ "mobike", no_argument, NULL, CD_MOBIKE },
+	{ "initialcontact", no_argument, NULL,  CD_INITIAL_CONTACT + OO },
+	{ "cisco_unity", no_argument, NULL, CD_CISCO_UNITY + OO },	/* obsolete _ */
+	{ "cisco-unity", no_argument, NULL, CD_CISCO_UNITY + OO },
+	{ "fake-strongswan", no_argument, NULL, CD_FAKE_STRONGSWAN + OO },
+	PS("mobike", MOBIKE),
 
 	{ "dpddelay", required_argument, NULL, CD_DPDDELAY + OO + NUMERIC_ARG },
 	{ "dpdtimeout", required_argument, NULL, CD_DPDTIMEOUT + OO + NUMERIC_ARG },
@@ -749,7 +762,7 @@ static const struct option long_opts[] = {
 	PS("esn", ESN_YES),
 	PS("decap-dscp", DECAP_DSCP),
 	PS("nopmtudisc", NOPMTUDISC),
-	PS("msdh-downgrade", MSDH_DOWNGRADE),
+	PS("ms-dh-downgrade", MSDH_DOWNGRADE),
 	PS("dns-match-id", DNS_MATCH_ID),
 #undef PS
 
@@ -765,12 +778,11 @@ static const struct option long_opts[] = {
 	{ "debug-none", no_argument, NULL, DBGOPT_NONE + OO },
 	{ "debug-all", no_argument, NULL, DBGOPT_ALL + OO },
 	{ "debug", required_argument, NULL, DBGOPT_DEBUG + OO, },
+	{ "no-debug", required_argument, NULL, DBGOPT_NO_DEBUG + OO, },
 	{ "impair", required_argument, NULL, DBGOPT_IMPAIR + OO, },
 	{ "no-impair", required_argument, NULL, DBGOPT_NO_IMPAIR + OO, },
 
 #    undef DO
-	{ "whackrecord",     required_argument, NULL, OPT_WHACKRECORD + OO },
-	{ "whackstoprecord", no_argument, NULL, OPT_WHACKSTOPRECORD + OO },
 #   undef OO
 	{ 0, 0, 0, 0 }
 };
@@ -832,19 +844,17 @@ static void update_ports(struct whack_message *m)
 }
 
 static void check_end(struct whack_end *this, struct whack_end *that,
-		      bool default_nexthop UNUSED, sa_family_t caf, sa_family_t taf)
+		      sa_family_t caf, sa_family_t taf)
 {
 	if (caf != addrtypeof(&this->host_addr))
 		diag("address family of host inconsistent");
 
 	if (this->has_client) {
-		if (taf != subnettypeof(&this->client))
+		if (aftoinfo(taf) != subnet_type(&this->client))
 			diag("address family of client subnet inconsistent");
 	} else {
 		/* fill in anyaddr-anyaddr as (missing) client subnet */
-		ip_address cn;
-
-		diagq(anyaddr(caf, &cn), NULL);
+		ip_address cn = address_any(aftoinfo(caf));
 		diagq(rangetosubnet(&cn, &cn, &this->client), NULL);
 	}
 
@@ -882,8 +892,7 @@ int main(int argc, char **argv)
 		lst_seen = LEMPTY,
 		cd_seen = LEMPTY,
 		cdp_seen = LEMPTY,
-		end_seen = LEMPTY,
-		end_seen_before_to = LEMPTY;
+		end_seen = LEMPTY;
 	const char
 		*af_used_by = NULL,
 		*tunnel_af_used_by = NULL;
@@ -912,7 +921,6 @@ int main(int argc, char **argv)
 
 	clear_end(&msg.right);	/* left set from this after --to */
 
-	/* msg was zero'd - setting to NULL is not needed */
 	msg.name = NULL;
 	msg.remote_host = NULL;
 	msg.dnshostname = NULL;
@@ -924,6 +932,7 @@ int main(int argc, char **argv)
 	msg.pfsgroup = NULL;
 
 	msg.remotepeertype = NON_CISCO;
+	msg.nat_keepalive = TRUE;
 
 	/* Network Manager support */
 #ifdef HAVE_NM
@@ -1294,6 +1303,10 @@ int main(int argc, char **argv)
 			msg.whack_ddos = DDOS_AUTO;
 			continue;
 
+		case OPT_DDNS:	/* --ddns */
+			msg.whack_ddns = TRUE;
+			continue;
+
 		case OPT_LISTEN:	/* --listen */
 			msg.whack_listen = TRUE;
 			continue;
@@ -1312,7 +1325,7 @@ int main(int argc, char **argv)
 			msg.whack_reread = REREAD_ALL;
 			continue;
 
-		case OPT_PURGEOCSP:
+		case OPT_PURGEOCSP:	/* --purgeocsp */
 			msg.whack_purgeocsp = TRUE;
 			continue;
 
@@ -1342,6 +1355,11 @@ int main(int argc, char **argv)
 
 		case OPT_FIPS_STATUS:	/* --fipsstatus */
 			msg.whack_fips_status = TRUE;
+			ignore_errors = TRUE;
+			continue;
+
+		case OPT_BRIEF_STATUS:	/* --briefstatus */
+			msg.whack_brief_status = TRUE;
 			ignore_errors = TRUE;
 			continue;
 
@@ -1383,7 +1401,7 @@ int main(int argc, char **argv)
 			oppo_dport = strtol(optarg, NULL, 0);
 			continue;
 
-		case OPT_ASYNC:
+		case OPT_ASYNC:	/* --asynchronous */
 			msg.whack_async = TRUE;
 			continue;
 
@@ -1421,8 +1439,7 @@ int main(int argc, char **argv)
 			lset_t new_policy = LEMPTY;
 
 			af_used_by = long_opts[long_index].name;
-			diagq(anyaddr(msg.addr_family,
-				      &msg.right.host_addr), optarg);
+			msg.right.host_addr = address_any(aftoinfo(msg.addr_family));
 			if (streq(optarg, "%any")) {
 			} else if (streq(optarg, "%opportunistic")) {
 				/* always use tunnel mode; mark as opportunistic */
@@ -1470,14 +1487,8 @@ int main(int argc, char **argv)
 					 * --client to 0.0.0.0/0
 					 * or IPV6 equivalent
 					 */
-					ip_address any;
-
 					tunnel_af_used_by = optarg;
-					diagq(anyaddr(msg.tunnel_addr_family,
-						      &any), optarg);
-					diagq(initsubnet(&any, 0, '0',
-							 &msg.right.client),
-					      optarg);
+					msg.right.client = (aftoinfo(msg.tunnel_addr_family)->all_addresses);
 				}
 				msg.right.has_client = TRUE;
 			}
@@ -1500,7 +1511,7 @@ int main(int argc, char **argv)
 			msg.right.id = optarg;	/* decoded by Pluto */
 			continue;
 
-		case END_SENDCERT:
+		case END_SENDCERT:	/* --sendcert */
 			if (streq(optarg, "yes") || streq(optarg, "always")) {
 				msg.right.sendcert = CERT_ALWAYSSEND;
 			} else if (streq(optarg,
@@ -1551,9 +1562,7 @@ int main(int argc, char **argv)
 		case END_NEXTHOP:	/* --nexthop <ip-address> */
 			af_used_by = long_opts[long_index].name;
 			if (streq(optarg, "%direct")) {
-				diagq(anyaddr(msg.addr_family,
-					      &msg.right.host_nexthop),
-				      optarg);
+				msg.right.host_nexthop = address_any(aftoinfo(msg.addr_family));
 			} else {
 				diagq(ttoaddr(optarg, 0, msg.addr_family,
 					      &msg.right.host_nexthop),
@@ -1572,6 +1581,7 @@ int main(int argc, char **argv)
 				diag("vtiip needs an address/mask value");
 			diagq(ttosubnet(optarg, 0,
 					msg.tunnel_addr_family,
+					'0' /* ip/mask host bits on allowed */,
 					&msg.right.host_vtiip), optarg);
 			/* ttosubnet() sets to lowest subnet address, fixup needed */
 			diagq(tnatoaddr(optarg, strchr(optarg, '/') - optarg, AF_UNSPEC, &msg.right.host_vtiip.addr), optarg);
@@ -1600,7 +1610,8 @@ int main(int argc, char **argv)
 			} else {
 				diagq(ttosubnet(optarg, 0,
 						msg.tunnel_addr_family,
-						&msg.right.client), optarg);
+						'6', &msg.right.client),
+					optarg);
 				msg.right.has_client = TRUE;
 			}
 			msg.policy |= POLICY_TUNNEL;	/* client => tunnel */
@@ -1633,14 +1644,13 @@ int main(int argc, char **argv)
 
 			msg.left = msg.right;
 			clear_end(&msg.right);
-			end_seen_before_to = end_seen;
 			end_seen = LEMPTY;
 			continue;
 
 		case CDP_SINGLETON + POLICY_PSK_IX:	/* --psk */
 		case CDP_SINGLETON + POLICY_RSASIG_IX:	/* --rsasig */
 		case CDP_SINGLETON + POLICY_AUTH_NEVER_IX:	/* --auth-never */
-		case CDP_SINGLETON + POLICY_AUTH_NULL_IX:	/* --null */
+		case CDP_SINGLETON + POLICY_AUTH_NULL_IX:	/* --auth-null */
 
 		case CDP_SINGLETON + POLICY_ENCRYPT_IX:	/* --encrypt */
 		/* --authenticate */
@@ -1698,10 +1708,14 @@ int main(int argc, char **argv)
 		case CDP_SINGLETON + POLICY_DECAP_DSCP_IX:
 		/* --nopmtudisc */
 		case CDP_SINGLETON + POLICY_NOPMTUDISC_IX:
-		/* --msdh-downgrade */
+		/* --ms-dh-downgrade */
 		case CDP_SINGLETON + POLICY_MSDH_DOWNGRADE_IX:
 		/* --dns-match-id */
 		case CDP_SINGLETON + POLICY_DNS_MATCH_ID_IX:
+		/* --allow-cert-without-san-id */
+		case CDP_SINGLETON + POLICY_ALLOW_NO_SAN_IX:
+		/* --sha2-truncbug or --sha2_truncbug */
+		case CDP_SINGLETON + POLICY_SHA2_TRUNCBUG_IX:
 
 			msg.policy |= LELEM(c - CDP_SINGLETON);
 			continue;
@@ -1766,7 +1780,7 @@ int main(int argc, char **argv)
 			msg.sa_replay_window = opt_whole;
 			continue;
 
-		case CD_SEND_CA:
+		case CD_SEND_CA:	/* --sendca */
 			if (streq(optarg, "issuer"))
 				msg.send_ca = CA_SEND_ISSUER;
 			else if (streq(optarg, "all"))
@@ -1776,11 +1790,11 @@ int main(int argc, char **argv)
 			continue;
 
 		/* backwards compatibility */
-		case CD_FORCEENCAPS:
+		case CD_FORCEENCAPS:	/* --forceencaps */
 			msg.encaps = yna_yes;
 			continue;
 
-		case CD_ENCAPS:
+		case CD_ENCAPS:	/* --encaps */
 			if (streq(optarg, "auto"))
 				msg.encaps = yna_auto;
 			else if (streq(optarg, "yes"))
@@ -1806,7 +1820,7 @@ int main(int argc, char **argv)
 			msg.nat_keepalive = FALSE;
 			continue;
 
-		case CD_IKEV1_NATT:	/* --ikev1_natt */
+		case CD_IKEV1_NATT:	/* --ikev1-natt */
 			if (streq(optarg, "both"))
 				msg.ikev1_natt = NATT_BOTH;
 			else if (streq(optarg, "rfc"))
@@ -1831,15 +1845,15 @@ int main(int argc, char **argv)
 			msg.fake_strongswan = TRUE;
 			continue;
 
-		case CD_DPDDELAY:
+		case CD_DPDDELAY:	/* --dpddelay */
 			msg.dpd_delay = deltatime(opt_whole);
 			continue;
 
-		case CD_DPDTIMEOUT:
+		case CD_DPDTIMEOUT:	/* --dpdtimeout */
 			msg.dpd_timeout = deltatime(opt_whole);
 			continue;
 
-		case CD_DPDACTION:
+		case CD_DPDACTION:	/* --dpdaction */
 			msg.dpd_action = 255;
 			if (streq(optarg, "clear"))
 				msg.dpd_action = DPD_ACTION_CLEAR;
@@ -1877,7 +1891,7 @@ int main(int argc, char **argv)
 			msg.redirect_to = strdup(optarg);
 			continue;
 
-		case CD_ACCEPT_REDIRECT:
+		case CD_ACCEPT_REDIRECT:	/* --accept-redirect */
 		{
 			lset_t new_policy = LEMPTY;
 
@@ -1925,16 +1939,16 @@ int main(int argc, char **argv)
 #endif
 
 #ifdef HAVE_LABELED_IPSEC
-		case CD_LABELED_IPSEC:
+		case CD_LABELED_IPSEC:	/* --labeledipsec */
 			msg.labeled_ipsec = TRUE;
 			continue;
 
-		case CD_POLICY_LABEL:
+		case CD_POLICY_LABEL:	/* --policylabel */
 			msg.policy_label = optarg;
 			continue;
 #endif
 
-		case CD_CONNIPV4:
+		case CD_CONNIPV4:	/* --ipv4 */
 			if (LHAS(cd_seen, CD_CONNIPV6 - CD_FIRST))
 				diag("--ipv4 conflicts with --ipv6");
 
@@ -1947,17 +1961,17 @@ int main(int argc, char **argv)
 			 */
 			continue;
 
-		case CD_RSA_SHA2_256:
-			msg.sighash_policy = POL_SIGHASH_SHA2_256;
+		case CD_RSA_SHA2_256:	/* --rsa-sha2, --rsa-sha2_256 */
+			msg.sighash_policy |= POL_SIGHASH_SHA2_256;
 			continue;
-		case CD_RSA_SHA2_384:
-			msg.sighash_policy = POL_SIGHASH_SHA2_384;
+		case CD_RSA_SHA2_384:	/* --rsa-sha2_384 */
+			msg.sighash_policy |= POL_SIGHASH_SHA2_384;
 			continue;
-		case CD_RSA_SHA2_512:
-			msg.sighash_policy = POL_SIGHASH_SHA2_512;
+		case CD_RSA_SHA2_512:	/* --rsa-sha2_512 */
+			msg.sighash_policy |= POL_SIGHASH_SHA2_512;
 			continue;
 
-		case CD_CONNIPV6:
+		case CD_CONNIPV6:	/* --ipv6 */
 			if (LHAS(cd_seen, CD_CONNIPV4 - CD_FIRST))
 				diag("--ipv6 conflicts with --ipv4");
 
@@ -1979,7 +1993,7 @@ int main(int argc, char **argv)
 				msg.tunnel_addr_family = AF_INET6;
 			continue;
 
-		case CD_TUNNELIPV4:
+		case CD_TUNNELIPV4:	/* --tunnelipv4 */
 			if (LHAS(cd_seen, CD_TUNNELIPV6 - CD_FIRST))
 				diag("--tunnelipv4 conflicts with --tunnelipv6");
 
@@ -1989,7 +2003,7 @@ int main(int argc, char **argv)
 			msg.tunnel_addr_family = AF_INET;
 			continue;
 
-		case CD_TUNNELIPV6:
+		case CD_TUNNELIPV6:	/* --tunnelipv6 */
 			if (LHAS(cd_seen, CD_TUNNELIPV4 - CD_FIRST))
 				diag("--tunnelipv6 conflicts with --tunnelipv4");
 
@@ -2021,7 +2035,7 @@ int main(int argc, char **argv)
 				xauthusername + 1;
 			continue;
 
-		case OPT_XAUTHPASS:
+		case OPT_XAUTHPASS:	/* --xauthpass */
 			gotxauthpass = TRUE;
 			/* ??? why does this length include NUL? */
 			xauthpasslen = jam_str(xauthpass, sizeof(xauthpass),
@@ -2029,17 +2043,16 @@ int main(int argc, char **argv)
 				xauthpass + 1;
 			continue;
 
-		case END_MODECFGCLIENT:
+		case END_MODECFGCLIENT:	/* --modeconfigclient */
 			msg.right.modecfg_client = TRUE;
 			continue;
 
-		case END_MODECFGSERVER:
+		case END_MODECFGSERVER:	/* --modeconfigserver */
 			msg.right.modecfg_server = TRUE;
 			continue;
 
-		case END_ADDRESSPOOL:
-			ttorange(optarg, 0, AF_INET, &msg.right.pool_range,
-					TRUE);
+		case END_ADDRESSPOOL:	/* --addresspool */
+			ttorange(optarg, NULL, &msg.right.pool_range);
 			continue;
 
 		case CD_MODECFGDNS:	/* --modecfgdns */
@@ -2076,7 +2089,7 @@ int main(int argc, char **argv)
 			msg.vti_shared = TRUE;
 			continue;
 
-		case CD_XAUTHBY:
+		case CD_XAUTHBY:	/* --xauthby */
 			if (streq(optarg, "file")) {
 				msg.xauthby = XAUTHBY_FILE;
 				continue;
@@ -2095,7 +2108,7 @@ int main(int argc, char **argv)
 			}
 			continue;
 
-		case CD_XAUTHFAIL:
+		case CD_XAUTHFAIL:	/* --xauthfail */
 			if (streq(optarg, "hard")) {
 				msg.xauthfail = XAUTHFAIL_HARD;
 				continue;
@@ -2109,27 +2122,27 @@ int main(int argc, char **argv)
 			}
 			continue;
 
-		case CD_METRIC:
+		case CD_METRIC:	/* --metric */
 			msg.metric = opt_whole;
 			continue;
 
-		case CD_CONNMTU:
+		case CD_CONNMTU:	/* --mtu */
 			msg.connmtu = opt_whole;
 			continue;
 
-		case CD_PRIORITY:
+		case CD_PRIORITY:	/* --priority */
 			msg.sa_priority = opt_whole;
 			continue;
 
-		case CD_TFCPAD:
+		case CD_TFCPAD:	/* --tfc */
 			msg.sa_tfcpad = opt_whole;
 			continue;
 
-		case CD_SEND_TFCPAD:
+		case CD_SEND_TFCPAD:	/* --send-no-esp-tfc */
 			msg.send_no_esp_tfc = TRUE;
 			continue;
 
-		case CD_NFLOG_GROUP:
+		case CD_NFLOG_GROUP:	/* --nflog-group */
 			if (opt_whole <= 0  ||
 			    opt_whole > 65535) {
 				char buf[120];
@@ -2142,7 +2155,7 @@ int main(int argc, char **argv)
 			msg.nflog_group = opt_whole;
 			continue;
 
-		case CD_REQID:
+		case CD_REQID:	/* --reqid */
 			if (opt_whole <= 0  ||
 			    opt_whole > IPSEC_MANUAL_REQID_MAX) {
 				char buf[120];
@@ -2157,18 +2170,7 @@ int main(int argc, char **argv)
 			msg.sa_reqid = opt_whole;
 			continue;
 
-		case OPT_WHACKRECORD:
-			msg.string1 = strdup(optarg);
-			msg.whack_options = TRUE;
-			msg.opt_set = WHACK_STARTWHACKRECORD;
-			break;
-
-		case OPT_WHACKSTOPRECORD:
-			msg.whack_options = TRUE;
-			msg.opt_set = WHACK_STOPWHACKRECORD;
-			break;
-
-		case DBGOPT_NONE:	/* --debug-none */
+		case DBGOPT_NONE:	/* --debug-none (obsolete) */
 			/*
 			 * Clear all debug and impair options.
 			 *
@@ -2185,7 +2187,7 @@ int main(int argc, char **argv)
 			msg.impairing = lmod_clr(msg.impairing, IMPAIR_MASK);
 			continue;
 
-		case DBGOPT_ALL:	/* --debug-all */
+		case DBGOPT_ALL:	/* --debug-all (obsolete) */
 			/*
 			 * Set most debug options ('all' does not
 			 * include PRIVATE which is cleared) and clear
@@ -2205,7 +2207,10 @@ int main(int argc, char **argv)
 			msg.impairing = lmod_clr(msg.impairing, IMPAIR_MASK);
 			continue;
 
-		case DBGOPT_DEBUG:
+		case DBGOPT_DEBUG:	/* --debug */
+		case DBGOPT_NO_DEBUG:	/* --no-debug */
+		{
+			bool enable = (c == DBGOPT_DEBUG);
 			if (streq(optarg, "list") || streq(optarg, "help") || streq(optarg, "?")) {
 				fprintf(stderr, "debug options (* included in 'all'):\n");
 				for (long e = next_enum(&debug_names, -1);
@@ -2225,13 +2230,17 @@ int main(int argc, char **argv)
 					}
 				}
 				exit(1);
-			} else if (!lmod_arg(&msg.debugging, &debug_lmod_info, optarg)) {
-				fprintf(stderr, "whack: unrecognized --debug '%s' option ignored\n",
-					optarg);
+			} else if (!lmod_arg(&msg.debugging, &debug_lmod_info, optarg, enable)) {
+				fprintf(stderr, "whack: unrecognized -%s-debug '%s' option ignored\n",
+					enable ? "" : "-no", optarg);
 			}
 			continue;
+		}
 
-		case DBGOPT_IMPAIR:
+		case DBGOPT_IMPAIR:	/* --impair */
+		case DBGOPT_NO_IMPAIR:	/* --no-impair */
+		{
+			bool enable = (c == DBGOPT_IMPAIR);
 			if (streq(optarg, "help") || streq(optarg, "?")) {
 				fprintf(stderr, "impair options:\n");
 				for (long e = next_enum(&impair_names, -1);
@@ -2248,32 +2257,25 @@ int main(int argc, char **argv)
 				}
 				help_impair("  ");
 				exit(1);
-			} else if (lmod_arg(&msg.impairing, &impair_lmod_info, optarg)) {
+			} else if (lmod_arg(&msg.impairing, &impair_lmod_info, optarg, enable)) {
 				if (lmod_is_set(msg.impairing, IMPAIR_FORCE_FIPS)) {
-					fprintf(stderr, "whack: invalid --impair '%s' option; must be passed directly to pluto\n",
-						optarg);
+					fprintf(stderr, "whack: invalid -%s-impair '%s' option; must be passed directly to pluto\n",
+						enable ? "" : "-no", optarg);
 					lmod_clr(msg.impairing, IMPAIR_FORCE_FIPS);
 				}
 				if (streq(optarg, "none")) {
 					/* hack to pass 'none' onto new code */
-					passert(parse_impair(optarg, &msg.impairment, true));
+					passert(parse_impair(optarg, &msg.impairment, enable));
 				}
-			} else if (!parse_impair(optarg, &msg.impairment, true)) {
+			} else if (!parse_impair(optarg, &msg.impairment, enable)) {
 				/* parse_impair() issued the error */
 				exit(1);
 			}
 			continue;
-
-		case DBGOPT_NO_IMPAIR:
-			if (!parse_impair(optarg, &msg.impairment, false)) {
-				/* parse_impair() issued the error */
-				exit(1);
-			}
-			continue;
+		}
 
 		default:
 			bad_case(c);
-			break;
 		}
 		break;
 	}
@@ -2337,15 +2339,13 @@ int main(int argc, char **argv)
 		}
 
 		check_end(&msg.left, &msg.right,
-			  !LHAS(end_seen_before_to, END_NEXTHOP - END_FIRST),
 			  msg.addr_family, msg.tunnel_addr_family);
 
 		check_end(&msg.right, &msg.left,
-			  !LHAS(end_seen, END_NEXTHOP - END_FIRST),
 			  msg.addr_family, msg.tunnel_addr_family);
 
-		if (subnettypeof(&msg.left.client) !=
-		    subnettypeof(&msg.right.client))
+		if (subnet_type(&msg.left.client) !=
+		    subnet_type(&msg.right.client))
 			diag("endpoints clash: one is IPv4 and the other is IPv6");
 
 		if (msg.policy & POLICY_AUTH_NEVER) {
@@ -2408,17 +2408,17 @@ int main(int argc, char **argv)
 	      msg.whack_terminate ||
 	      msg.whack_route || msg.whack_unroute || msg.whack_listen ||
 	      msg.whack_unlisten || msg.whack_list || msg.ike_buf_size ||
-	      msg.whack_ddos != DDOS_undefined ||
+	      msg.whack_ddos != DDOS_undefined || msg.whack_ddns ||
 	      msg.whack_reread || msg.whack_crash || msg.whack_shunt_status ||
 	      msg.whack_status || msg.whack_global_status || msg.whack_traffic_status ||
-	      msg.whack_fips_status || msg.whack_clear_stats || msg.whack_options ||
+	      msg.whack_fips_status || msg.whack_brief_status || msg.whack_clear_stats || msg.whack_options ||
 	      msg.whack_shutdown || msg.whack_purgeocsp || msg.whack_seccomp_crashtest))
 		diag("no action specified; try --help for hints");
 
 	/* do the logic for --redirect command */
 	if (msg.active_redirect) {
-		bool redirect_peer_spec = !isanyaddr(&msg.active_redirect_peer);
-		bool redirect_gw_spec = !isanyaddr(&msg.active_redirect_gw);
+		bool redirect_peer_spec = address_is_specified(&msg.active_redirect_peer);
+		bool redirect_gw_spec = address_is_specified(&msg.active_redirect_gw);
 		msg.active_redirect = FALSE;	/* if we pass all the 'tests' we set it back to TRUE */
 		if (msg.name != NULL)
 			if (redirect_peer_spec)
@@ -2599,8 +2599,29 @@ int main(int argc, char **argv)
 				be -= ls - buf;
 				break;
 			}
-
 			le++;	/* include NL in line */
+
+			/*
+			 * figure out prefix number and how it should
+			 * affect our exit status and printing
+			 */
+			char *lpe = NULL; /* line-prefix-end */
+			unsigned long s = strtoul(ls, &lpe, 10);
+			if (lpe == ls || *lpe != ' ') {
+				/* includes embedded NL, see above */
+				fprintf(stderr, "whack: log line missing NNN prefix: %*s",
+					(int)(le - ls), ls);
+#if 0
+				ls = le;
+				continue;
+#else
+				exit(RC_WHACK_PROBLEM);
+#endif
+			}
+			if (s == RC_PRINT) {
+				ls = lpe + 1; /* skip NNN_ */
+			}
+
 			if (write(STDOUT_FILENO, ls, le - ls) != (le - ls)) {
 				int e = errno;
 
@@ -2609,20 +2630,10 @@ int main(int argc, char **argv)
 					e, strerror(e));
 			}
 
-			/*
-			 * figure out prefix number
-			 * and how it should affect our exit
-			 * status
-			 *
-			 * we don't generally use strtoul but
-			 * in this case, its failure mode
-			 * (0 for nonsense) is probably OK.
-			 */
-			unsigned long s = strtoul(ls, NULL, 10);
-
 			switch (s) {
 			/* these logs are informational only */
 			case RC_COMMENT:
+			case RC_PRINT:
 			case RC_INFORMATIONAL:
 			case RC_INFORMATIONAL_TRAFFIC:
 			case RC_LOG:
@@ -2657,8 +2668,12 @@ int main(int argc, char **argv)
 				break;
 
 			default:
-				/* Only RC_ codes between RC_DUPNAME and RC_NEW_STATE are errors */
-				if (s > 0 && (s < RC_DUPNAME || s >= RC_NEW_STATE))
+				/*
+				 * Only RC_ codes between
+				 * RC_EXIT_FLOOR (RC_DUPNAME) and
+				 * RC_EXIT_ROOF are errors
+				 */
+				if (s > 0 && (s < RC_EXIT_FLOOR || s >= RC_EXIT_ROOF))
 					s = 0;
 				exit_status = msg.whack_async ?
 					0 : s;

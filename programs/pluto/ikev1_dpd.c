@@ -10,8 +10,9 @@
  * Copyright (C) 2012 Paul Wouters <paul@libreswan.org>
  * Copyright (C) 2013-2017 Paul Wouters <pwouters@redhat.com>
  * Copyright (C) 2013-2015 Matt Rogers <mrogers@redhat.com>
- * Copyright (C) 2013-2016 D. Hugh Redelmeier <hugh@mimosa.com>
+ * Copyright (C) 2013-2019 D. Hugh Redelmeier <hugh@mimosa.com>
  * Copyright (C) 2014-2016 Antony Antony <antony@phenome.org>
+ * Copyright (C) 2019 Andrew Cagney <cagney@gnu.org>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -34,7 +35,6 @@
 #include <arpa/inet.h>
 #include <resolv.h>
 
-#include <libreswan.h>
 
 #include "sysdep.h"
 #include "constants.h"
@@ -118,10 +118,6 @@
 
 stf_status dpd_init(struct state *st)
 {
-	/**
-	 * Used to store the 1st state
-	 */
-	struct state *p1st;
 	bool peer_supports_dpd = st->hidden_variables.st_peer_supports_dpd;
 	bool want_dpd = dpd_active_locally(st);
 
@@ -142,7 +138,6 @@ stf_status dpd_init(struct state *st)
 			DBG(DBG_DPD, DBG_log("DPD: not initializing DPD because DPD is disabled locally"));
 			return STF_OK;
 		}
-		p1st = st;
 	} else {
 		DBG(DBG_DPD, DBG_log("DPD: dpd_init() called on IPsec SA"));
 		if (!peer_supports_dpd || !want_dpd) {
@@ -151,8 +146,7 @@ stf_status dpd_init(struct state *st)
 		}
 
 		/* find the IKE SA */
-		p1st = find_state_ikev1(&st->st_ike_spis.initiator,
-				&st->st_ike_spis.responder, 0);
+		struct state *p1st = find_state_ikev1(&st->st_ike_spis, 0);
 		if (p1st == NULL) {
 			loglog(RC_LOG_SERIOUS, "could not find phase 1 state for DPD");
 			return STF_FAIL;
@@ -305,14 +299,11 @@ static void dpd_outI(struct state *p1st, struct state *st, bool eroute_care,
 	 */
 	dpd_sched_timeout(p1st, nw, timeout);
 
-	DBG(DBG_DPD, {
-		ipstr_buf b;
-		DBG_log("DPD: sending R_U_THERE %u to %s:%d (state #%lu)",
-			 p1st->st_dpd_seqno,
-			 ipstr(&p1st->st_remoteaddr, &b),
-			 p1st->st_remoteport,
-			 p1st->st_serialno);
-	});
+	endpoint_buf b;
+	dbg("DPD: sending R_U_THERE %u to %s (state #%lu)",
+	    p1st->st_dpd_seqno,
+	    str_endpoint(&p1st->st_remote_endpoint, &b),
+	    p1st->st_serialno);
 
 	if (send_isakmp_notification(p1st, R_U_THERE,
 				     &seqno, sizeof(seqno)) != STF_IGNORE) {
@@ -365,7 +356,7 @@ void dpd_event(struct state *st)
 
 	set_cur_state(st);
 
-	if (IS_PHASE1(st->st_state) || IS_PHASE15(st->st_state))
+	if (IS_PHASE1(st->st_state->kind) || IS_PHASE15(st->st_state->kind))
 		p1_dpd_outI1(st);
 	else
 		p2_dpd_outI1(st);

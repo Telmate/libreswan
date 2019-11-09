@@ -1,5 +1,5 @@
 /*
- * A program to read the configuration file and load a single conn
+ * addr_lookup: resolve_defaultroute_one() -- attempt to resolve a default route
  * Copyright (C) 2005 Michael Richardson <mcr@xelerance.com>
  * Copyright (C) 2012-2014 Paul Wouters <paul@libreswan.org>
  * Copyright (C) 2014 D. Hugh Redelmeier <hugh@mimosa.com>
@@ -16,15 +16,14 @@
  * for more details.
  */
 
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <net/if.h>
+#include <stdio.h>
 #include <errno.h>
-#include <linux/netlink.h>
+#include <unistd.h>
+
+#include <net/if.h>
 #include <linux/rtnetlink.h>
 #include <arpa/inet.h>
 #include <ifaddrs.h>
-#include <unistd.h>
 
 #include "constants.h"
 #include "lswalloc.h"
@@ -121,13 +120,12 @@ static void netlink_query_init(char *msgbuf, sa_family_t family)
 /*
  * Add RTA_SRC or RTA_DST attribute to netlink query message.
  */
-static void netlink_query_add(char *msgbuf, int rta_type, ip_address *addr)
+static void netlink_query_add(char *msgbuf, int rta_type, const ip_address *addr)
 {
 	struct nlmsghdr *nlmsg;
 	struct rtmsg *rtmsg;
 	struct rtattr *rtattr;
-	int len, rtlen;
-	void *p;
+	int rtlen;
 
 	nlmsg = (struct nlmsghdr *)msgbuf;
 	rtmsg = (struct rtmsg *)NLMSG_DATA(nlmsg);
@@ -139,20 +137,14 @@ static void netlink_query_add(char *msgbuf, int rta_type, ip_address *addr)
 		rtattr = RTA_NEXT(rtattr, rtlen);
 
 	/* Add attribute */
-	if (rtmsg->rtm_family == AF_INET) {
-		len = 4;
-		p = (void *)&addr->u.v4.sin_addr.s_addr;
-	} else {
-		len = 16;
-		p = (void *)addr->u.v6.sin6_addr.s6_addr;
-	}
+	shunk_t bytes = address_as_shunk(addr);
 	rtattr->rta_type = rta_type;
-	rtattr->rta_len = sizeof(struct rtattr) + len; /* bytes */
-	memmove(RTA_DATA(rtattr), p, len);
+	rtattr->rta_len = sizeof(struct rtattr) + bytes.len; /* bytes */
+	memmove(RTA_DATA(rtattr), bytes.ptr, bytes.len);
 	if (rta_type == RTA_SRC)
-		rtmsg->rtm_src_len = len * 8; /* bits */
+		rtmsg->rtm_src_len = bytes.len * 8; /* bits */
 	else
-		rtmsg->rtm_dst_len = len * 8;
+		rtmsg->rtm_dst_len = bytes.len * 8;
 	nlmsg->nlmsg_len += rtattr->rta_len;
 }
 
@@ -232,6 +224,7 @@ static ssize_t netlink_query(char **pmsgbuf, size_t bufsize)
 		int e = errno;
 
 		printf("write netlink socket failure: (%d: %s)\n", e, strerror(e));
+		close(sock);
 		return -1;
 	}
 
@@ -239,13 +232,10 @@ static ssize_t netlink_query(char **pmsgbuf, size_t bufsize)
 	errno = 0;	/* in case failure does not set it */
 	ssize_t len = netlink_read_reply(sock, pmsgbuf, bufsize, 1, getpid());
 
-	if (len < 0) {
-		int e = errno;
+	if (len < 0)
+		printf("read netlink socket failure: (%d: %s)\n",
+			errno, strerror(errno));
 
-		printf("read netlink socket failure: (%d: %s)\n", e, strerror(e));
-		close(sock);
-		return -1;
-	}
 	close(sock);
 	return len;
 }

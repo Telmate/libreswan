@@ -64,7 +64,7 @@ void lswlog_errno_prefix(struct lswlog *buf, const char *prefix)
 void lswlog_errno_suffix(struct lswlog *buf, int e)
 {
 	lswlogs(buf, ".");
-	lswlog_errno(buf, e);
+	jam(buf, " "PRI_ERRNO, pri_errno(e));
 	if (log_to_stderr) {
 		lswlog_to_file_stream(buf, stderr);
 	}
@@ -75,7 +75,7 @@ void lswlog_log_prefix(struct lswlog *buf)
 	lswlogf(buf, "%s%s", progname, prog_suffix);
 }
 
-void lswlog_to_whack_stream(struct lswlog *buf)
+void lswlog_to_whack_stream(struct lswlog *buf, enum rc_type unused_rc UNUSED)
 {
 	fprintf(stderr, "%s\n", buf->array);
 }

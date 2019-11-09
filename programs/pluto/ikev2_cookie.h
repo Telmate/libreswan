@@ -1,6 +1,6 @@
 /* IKEv2 cookie calculation, for Libreswan
  *
- * Copyright (C) 2018 Andrew Cagney
+ * Copyright (C) 2018-2019 Andrew Cagney <cagney@gnu.org>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -23,6 +23,7 @@ struct msg_digest;
 
 void refresh_v2_cookie_secret(void);
 
-bool v2_reject_cookie(struct msg_digest *md, bool require_cookie);
+bool v2_rejected_initiator_cookie(struct msg_digest *md,
+				  bool me_want_cookies);
 
 #endif

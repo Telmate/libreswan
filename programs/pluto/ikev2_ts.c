@@ -9,6 +9,7 @@
  * Copyright (C) 2013 D. Hugh Redelmeier <hugh@mimosa.com>
  * Copyright (C) 2014-2015, 2018 Andrew cagney <cagney@gnu.org>
  * Copyright (C) 2017 Antony Antony <antony@phenome.org>
+ * Copyright (C) 2019 Andrew Cagney <cagney@gnu.org>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -30,6 +31,7 @@
 #include "demux.h"
 #include "virtual.h"
 #include "hostpair.h"
+#include "ip_info.h"
 
 /*
  * While the RFC seems to suggest that the traffic selectors come in
@@ -65,55 +67,33 @@ static const char *fit_string(enum fit fit)
 void ikev2_print_ts(const struct traffic_selector *ts)
 {
 	DBG(DBG_CONTROLMORE, {
-		char b[RANGETOT_BUF];
-
-		rangetot(&ts->net, 0, b, sizeof(b));
 		DBG_log("printing contents struct traffic_selector");
 		DBG_log("  ts_type: %s", enum_name(&ikev2_ts_type_names, ts->ts_type));
 		DBG_log("  ipprotoid: %d", ts->ipprotoid);
 		DBG_log("  port range: %d-%d", ts->startport, ts->endport);
-		DBG_log("  ip range: %s", b);
+		range_buf b;
+		DBG_log("  ip range: %s", str_range(&ts->net, &b));
 	});
 }
 
-/* rewrite me with addrbytesptr_write() */
+/* rewrite me with address_as_{chunk,shunk}()? */
 struct traffic_selector ikev2_end_to_ts(const struct end *e)
 {
 	struct traffic_selector ts;
 
 	zero(&ts);	/* OK: no pointer fields */
 
-	/* subnet => range */
-	ts.net.start = e->client.addr;
-	ts.net.end = e->client.addr;
-	switch (addrtypeof(&e->client.addr)) {
+	switch (subnet_type(&e->client)->af) {
 	case AF_INET:
-	{
-		struct in_addr v4mask = bitstomask(e->client.maskbits);
-
 		ts.ts_type = IKEv2_TS_IPV4_ADDR_RANGE;
-		ts.net.start.u.v4.sin_addr.s_addr &= v4mask.s_addr;
-		ts.net.end.u.v4.sin_addr.s_addr |= ~v4mask.s_addr;
 		break;
-	}
 	case AF_INET6:
-	{
-		struct in6_addr v6mask = bitstomask6(e->client.maskbits);
-
 		ts.ts_type = IKEv2_TS_IPV6_ADDR_RANGE;
-		ts.net.start.u.v6.sin6_addr.s6_addr32[0] &= v6mask.s6_addr32[0];
-		ts.net.start.u.v6.sin6_addr.s6_addr32[1] &= v6mask.s6_addr32[1];
-		ts.net.start.u.v6.sin6_addr.s6_addr32[2] &= v6mask.s6_addr32[2];
-		ts.net.start.u.v6.sin6_addr.s6_addr32[3] &= v6mask.s6_addr32[3];
-
-		ts.net.end.u.v6.sin6_addr.s6_addr32[0] |= ~v6mask.s6_addr32[0];
-		ts.net.end.u.v6.sin6_addr.s6_addr32[1] |= ~v6mask.s6_addr32[1];
-		ts.net.end.u.v6.sin6_addr.s6_addr32[2] |= ~v6mask.s6_addr32[2];
-		ts.net.end.u.v6.sin6_addr.s6_addr32[3] |= ~v6mask.s6_addr32[3];
 		break;
 	}
 
-	}
+	/* subnet => range */
+	ts.net = range_from_subnet(&e->client);
 	/* Setting ts_type IKEv2_TS_FC_ADDR_RANGE (RFC-4595) not yet supported */
 
 	ts.ipprotoid = e->protocol;
@@ -183,20 +163,13 @@ static stf_status ikev2_emit_ts(pb_stream *outpbs,
 	/* now do IP addresses */
 	switch (ts->ts_type) {
 	case IKEv2_TS_IPV4_ADDR_RANGE:
-		if (!out_raw(&ts->net.start.u.v4.sin_addr.s_addr, 4, &ts_pbs2,
-			     "ipv4 start") ||
-		    !out_raw(&ts->net.end.u.v4.sin_addr.s_addr, 4, &ts_pbs2,
-			     "ipv4 end"))
-			return STF_INTERNAL_ERROR;
-
-		break;
 	case IKEv2_TS_IPV6_ADDR_RANGE:
-		if (!out_raw(&ts->net.start.u.v6.sin6_addr.s6_addr, 16, &ts_pbs2,
-			     "ipv6 start") ||
-		    !out_raw(&ts->net.end.u.v6.sin6_addr.s6_addr, 16, &ts_pbs2,
-			     "ipv6 end"))
+		if (!pbs_out_address(&ts->net.start, &ts_pbs2, "IP start")) {
 			return STF_INTERNAL_ERROR;
-
+		}
+		if (!pbs_out_address(&ts->net.end, &ts_pbs2, "IP end")) {
+			return STF_INTERNAL_ERROR;
+		}
 		break;
 	case IKEv2_TS_FC_ADDR_RANGE:
 		DBG_log("Traffic Selector IKEv2_TS_FC_ADDR_RANGE not supported");
@@ -293,46 +266,26 @@ static bool v2_parse_ts(struct payload_digest *const ts_pd,
 		if (!in_struct(&ts1, &ikev2_ts1_desc, &ts_pd->pbs, &addr))
 			return false;
 
+		const struct ip_info *ipv;
 		switch (ts1.isat1_type) {
 		case IKEv2_TS_IPV4_ADDR_RANGE:
-			ts->ts_type = IKEv2_TS_IPV4_ADDR_RANGE;
-			SET_V4(ts->net.start);
-			if (!in_raw(&ts->net.start.u.v4.sin_addr.s_addr,
-				    sizeof(ts->net.start.u.v4.sin_addr.s_addr),
-				    &addr, "ipv4 ts low"))
-				return false;
-
-			SET_V4(ts->net.end);
-
-			if (!in_raw(&ts->net.end.u.v4.sin_addr.s_addr,
-				    sizeof(ts->net.end.u.v4.sin_addr.s_addr),
-				    &addr, "ipv4 ts high"))
-				return false;
-
+			ipv = &ipv4_info;
 			break;
-
 		case IKEv2_TS_IPV6_ADDR_RANGE:
-			ts->ts_type = IKEv2_TS_IPV6_ADDR_RANGE;
-			SET_V6(ts->net.start);
-
-			if (!in_raw(&ts->net.start.u.v6.sin6_addr.s6_addr,
-				    sizeof(ts->net.start.u.v6.sin6_addr.s6_addr),
-				    &addr, "ipv6 ts low"))
-				return false;
-
-			SET_V6(ts->net.end);
-
-			if (!in_raw(&ts->net.end.u.v6.sin6_addr.s6_addr,
-				    sizeof(ts->net.end.u.v6.sin6_addr.s6_addr),
-				    &addr, "ipv6 ts high"))
-				return false;
-
+			ipv = &ipv6_info;
 			break;
-
 		default:
 			return false;
 		}
 
+		ts->ts_type = IKEv2_TS_IPV6_ADDR_RANGE;
+		if (!pbs_in_address(&ts->net.start, ipv, &addr, "TS low")) {
+			return false;
+		}
+		if (!pbs_in_address(&ts->net.end, ipv, &addr, "TS high")) {
+			return false;
+		}
+		/* XXX: does this matter? */
 		if (pbs_left(&addr) != 0)
 			return false;
 
@@ -425,7 +378,7 @@ static int score_narrow_protocol(const struct end *end,
 	} else {
 		f = 0;
 	}
-	LSWDBGP(DBG_MASK, buf) {
+	LSWDBGP(DBG_BASE, buf) {
 		const struct traffic_selector *ts = &tss->ts[index];
 		lswlogf(buf, MATCH_PREFIX "match end->protocol=%s%d %s %s[%u].ipprotoid=%s%d: ",
 			end->protocol == 0 ? "*" : "", end->protocol,
@@ -561,26 +514,25 @@ static int score_address_range(const struct end *end,
 	 *
 	 * XXX: so what is CIDR?
 	 */
-	ip_address floor = ip_subnet_floor(&end->client);
-	ip_address ceiling = ip_subnet_ceiling(&end->client);
-	passert(addrcmp(&floor, &ceiling) <= 0);
+	ip_range range = range_from_subnet(&end->client);
+	passert(addrcmp(&range.start, &range.end) <= 0);
 	passert(addrcmp(&ts->net.start, &ts->net.end) <= 0);
 	switch (fit) {
 	case END_EQUALS_TS:
-		if (addrcmp(&floor, &ts->net.start) == 0 &&
-		    addrcmp(&ceiling, &ts->net.end) == 0) {
+		if (addrcmp(&range.start, &ts->net.start) == 0 &&
+		    addrcmp(&range.end, &ts->net.end) == 0) {
 			f = fitbits;
 		}
 		break;
 	case END_NARROWER_THAN_TS:
-		if (addrcmp(&floor, &ts->net.start) >= 0 &&
-		    addrcmp(&ceiling, &ts->net.end) <= 0) {
+		if (addrcmp(&range.start, &ts->net.start) >= 0 &&
+		    addrcmp(&range.end, &ts->net.end) <= 0) {
 			f = fitbits;
 		}
 		break;
 	case END_WIDER_THAN_TS:
-		if (addrcmp(&floor, &ts->net.start) <= 0 &&
-		    addrcmp(&ceiling, &ts->net.end) >= 0) {
+		if (addrcmp(&range.start, &ts->net.start) <= 0 &&
+		    addrcmp(&range.end, &ts->net.end) >= 0) {
 			f = fitbits;
 		}
 		break;
@@ -599,15 +551,12 @@ static int score_address_range(const struct end *end,
 	    ts->endport == end->port)
 		f = f << 1;
 
-	LSWDBGP(DBG_MASK, buf) {
-	    char end_client[SUBNETTOT_BUF];
-	    subnettot(&end->client,  0, end_client, sizeof(end_client));
-	    char ts_net[RANGETOT_BUF];
-	    rangetot(&ts->net, 0, ts_net, sizeof(ts_net));
-	    lswlogf(buf, MATCH_PREFIX "match address end->client=%s %s %s[%u]net=%s: ",
-		    end_client,
-		    fit_string(fit),
-		    which, index, ts_net);
+	LSWDBGP(DBG_BASE, buf) {
+	    lswlogf(buf, MATCH_PREFIX "match address end->client=");
+	    jam_subnet(buf, &end->client);
+	    jam(buf, " %s %s[%u]net=", fit_string(fit), which, index);
+	    jam_range(buf, &ts->net);
+	    jam(buf, ": ");
 	    if (f > 0) {
 		    lswlogf(buf, "YES fitness %d", f);
 	    } else {
@@ -631,11 +580,10 @@ static struct score score_end(const struct end *end,
 {
 	const struct traffic_selector *ts = &tss->ts[index];
 	DBG(DBG_CONTROLMORE,
-	    char ts_net[RANGETOT_BUF];
-	    rangetot(&ts->net, 0, ts_net, sizeof(ts_net));
+	    range_buf ts_net;
 	    DBG_log("    %s[%u] .net=%s .iporotoid=%d .{start,end}port=%d..%d",
 		    what, index,
-		    ts_net,
+		    str_range(&ts->net, &ts_net),
 		    ts->ipprotoid,
 		    ts->startport,
 		    ts->endport));
@@ -683,18 +631,16 @@ static struct best_score score_ends(enum fit fit,
 				    const struct traffic_selectors *tsi,
 				    const struct traffic_selectors *tsr)
 {
-	DBG(DBG_CONTROLMORE, {
-		char ei3[SUBNETTOT_BUF];
-		char er3[SUBNETTOT_BUF];
-		char cib[CONN_INST_BUF];
-		subnettot(&ends->i->client,  0, ei3, sizeof(ei3));
-		subnettot(&ends->r->client,  0, er3, sizeof(er3));
-		DBG_log("evaluating our conn=\"%s\"%s I=%s:%d/%d R=%s:%d/%d%s to their:",
-			d->name, fmt_conn_instance(d, cib),
-			ei3, ends->i->protocol, ends->i->port,
-			er3, ends->r->protocol, ends->r->port,
+	if (DBGP(DBG_BASE)) {
+		subnet_buf ei3;
+		subnet_buf er3;
+		connection_buf cib;
+		DBG_log("evaluating our conn="PRI_CONNECTION" I=%s:%d/%d R=%s:%d/%d%s to their:",
+			pri_connection(d, &cib),
+			str_subnet_port(&ends->i->client, &ei3), ends->i->protocol, ends->i->port,
+			str_subnet_port(&ends->r->client, &er3), ends->r->protocol, ends->r->port,
 			is_virtual_connection(d) ? " (virt)" : "");
-	});
+	}
 
 	struct best_score best_score = NO_SCORE;
 
@@ -795,7 +741,7 @@ bool v2_process_ts_request(struct child_sa *child,
 			continue;
 		}
 		if (score_gt(&score, &best_score)) {
-			dbg("    found better spd route for TSi[%zu],TSr[%zu]",
+			dbg("    found better spd route for TSi[%td],TSr[%td]",
 			    score.tsi - tsi.ts, score.tsr - tsr.ts);
 			best_score = score;
 			best_spd_route = sra;
@@ -820,23 +766,16 @@ bool v2_process_ts_request(struct child_sa *child,
 	for (const struct spd_route *sra = &c->spd;
 	     hp == NULL && sra != NULL; sra = sra->spd_next) {
 		hp = find_host_pair(&sra->this.host_addr,
-				    sra->this.host_port,
-				    &sra->that.host_addr,
-				    sra->that.host_port);
+				    &sra->that.host_addr);
 
-		DBG(DBG_CONTROLMORE, {
-			char s2[SUBNETTOT_BUF];
-			char d2[SUBNETTOT_BUF];
-
-			subnettot(&sra->this.client, 0, s2,
-				  sizeof(s2));
-			subnettot(&sra->that.client, 0, d2,
-				  sizeof(d2));
-
+		if (DBGP(DBG_BASE)) {
+			subnet_buf s2;
+			subnet_buf d2;
 			DBG_log("  checking hostpair %s -> %s is %s",
-				s2, d2,
+				str_subnet_port(&sra->this.client, &s2),
+				str_subnet_port(&sra->that.client, &d2),
 				hp == NULL ? "not found" : "found");
-		});
+		}
 
 		if (hp == NULL)
 			continue;
@@ -895,7 +834,7 @@ bool v2_process_ts_request(struct child_sa *child,
 					continue;
 				}
 				if (score_gt(&score, &best_score)) {
-					dbg("    protocol fitness found better match d %s, TSi[%zu],TSr[%zu]",
+					dbg("    protocol fitness found better match d %s, TSi[%td],TSr[%td]",
 					    d->name,
 					    score.tsi - tsi.ts, score.tsr - tsr.ts);
 					best_connection = d;
@@ -961,12 +900,13 @@ bool v2_process_ts_request(struct child_sa *child,
 		passert(best_connection == c);
 		dbg("no best spd route; looking for a better template connection to instantiate");
 
+		dbg("FOR_EACH_CONNECTION_... in %s", __func__);
 		for (struct connection *t = connections; t != NULL; t = t->ac_next) {
 			/* require a template */
 			if (t->kind != CK_TEMPLATE) {
 				continue;
 			}
-			LSWDBGP(DBG_MASK, buf) {
+			LSWDBGP(DBG_BASE, buf) {
 				lswlogf(buf, "  investigating template \"%s\";",
 					t->name);
 				if (t->foodgroup != NULL) {

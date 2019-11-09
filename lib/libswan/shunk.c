@@ -1,6 +1,6 @@
-/* string fragments, for libreswan
+/* Constant string (octet) fragments, for libreswan
  *
- * Copyright (C) 2018 Andrew Cagney
+ * Copyright (C) 2018-2019 Andrew Cagney <cagney@gnu.org>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -17,50 +17,111 @@
 #include <string.h>
 #include <stdlib.h>	/* for strtoul() */
 #include <limits.h>
+#include <ctype.h>
 
 #include "shunk.h"
+#include "lswlog.h"	/* for pexpect() */
 
-const shunk_t empty_shunk;
+/*
+ * Don't mistake a NULL_SHUNK for an EMPTY_SHUNK - just like when
+ * manipulating strings they are different.
+ */
+
+const shunk_t null_shunk = NULL_SHUNK;
+const shunk_t empty_shunk = { .ptr = "", .len = 0, };
 
 shunk_t shunk1(const char *ptr)
 {
 	if (ptr == NULL) {
-		return empty_shunk;
+		return null_shunk;
 	} else {
 		return shunk2(ptr, strlen(ptr));
 	}
 }
 
-shunk_t shunk2(const char *ptr, int len)
+shunk_t shunk2(const void *ptr, int len)
 {
 	/*
-	 * Since a zero length string and a NULL string pointer are
-	 * considered to be different, don't convert the former into
-	 * an empty_chunk.
+	 * Since a zero length string is not the same as a NULL
+	 * string, don't try to be smart and convert the former into
+	 * the latter.
 	 */
 	return (shunk_t) { .ptr = ptr, .len = len, };
 }
 
-shunk_t shunk_strsep(shunk_t *shunk, const char *delim)
+shunk_t shunk_slice(shunk_t s, size_t start, size_t stop)
 {
-	shunk_t token = shunk2(shunk->ptr, 0);
-	while (shunk->len > 0) {
-		if (strchr(delim, *shunk->ptr) != NULL) {
-			/* discard delim */
-			shunk->ptr++;
-			shunk->len--;
+	pexpect(start <= stop);
+	pexpect(stop <= s.len);
+	const char *c = s.ptr;
+	return shunk2(c + start, stop - start);
+}
+
+shunk_t shunk_token(shunk_t *input, char *delim, const char *delims)
+{
+	/*
+	 * If INPUT is either empty, or the NULL_SHUNK, the loop is
+	 * skipped.
+	 */
+	const char *const start = input->ptr;
+	const char *pos = start;
+	while (pos < start + input->len) {
+		if (strchr(delims, *pos) != NULL) {
+			/* save the token and stop character */
+			shunk_t token = shunk2(start, pos-start);
+			if (delim != NULL) {
+				*delim = *pos;
+			}
+			/* skip over TOKEN+DELIM */
+			*input = shunk_slice(*input, pos-start+1, input->len);
 			return token;
 		}
-		/* advance, transfering the char */
-		token.len++;
-		shunk->ptr++;
-		shunk->len--;
+		pos++;
 	}
+	/*
+	 * The last token is all of INPUT.  Flag that INPUT has been
+	 * exhausted by setting INPUT to the NULL_SHUNK; the next call
+	 * will return that NULL_SHUNK.
+	 */
+	shunk_t token = *input;
+	*input = null_shunk;
+	if (delim != NULL) {
+		*delim = '\0';
+	}
+	return token;
+}
+
+shunk_t shunk_span(shunk_t *input, const char *accept)
+{
+	/*
+	 * If INPUT is either empty, or the NULL_SHUNK, the loop is
+	 * skipped.
+	 */
+	const char *const start = input->ptr;
+	const char *pos = start;
+	while (pos < start + input->len) {
+		if (strchr(accept, *pos) == NULL) {
+			/* save the token and stop character */
+			shunk_t token = shunk2(start, pos - start);
+			/* skip over TOKEN+DELIM */
+			*input = shunk_slice(*input, pos - start, input->len);
+			return token;
+		}
+		pos++;
+	}
+	/*
+	 * The last token is all of INPUT.  Flag that INPUT has been
+	 * exhausted by setting INPUT to the NULL_SHUNK; the next call
+	 * will return that NULL_SHUNK.
+	 */
+	shunk_t token = *input;
+	*input = null_shunk;
 	return token;
 }
 
 bool shunk_caseeq(shunk_t lhs, shunk_t rhs)
 {
+	/* NULL and EMPTY("") are not the same */
 	if (lhs.ptr == NULL || rhs.ptr == NULL) {
 		return lhs.ptr == rhs.ptr;
 	}
@@ -75,6 +136,19 @@ bool shunk_strcaseeq(shunk_t shunk, const char *str)
 	return shunk_caseeq(shunk, shunk1(str));
 }
 
+bool bytes_eq(const void *l_ptr, size_t l_len,
+	      const void *r_ptr, size_t r_len)
+{
+	/* NULL and EMPTY("") are not the same */
+	if (l_ptr == NULL || r_ptr == NULL) {
+		return l_ptr == r_ptr;
+	}
+	if (l_len != r_len) {
+		return false;
+	}
+	return memcmp(l_ptr, r_ptr, r_len) == 0;
+}
+
 bool shunk_caseeat(shunk_t *shunk, shunk_t dinner)
 {
 	if (shunk->ptr == NULL || dinner.ptr == NULL) {
@@ -86,8 +160,7 @@ bool shunk_caseeat(shunk_t *shunk, shunk_t dinner)
 	if (strncasecmp(shunk->ptr, dinner.ptr, dinner.len) != 0) {
 		return false;
 	}
-	shunk->ptr += dinner.len;
-	shunk->len -= dinner.len;
+	*shunk = shunk_slice(*shunk, dinner.len, shunk->len);
 	return true;
 }
 
@@ -122,4 +195,20 @@ bool shunk_tou(shunk_t shunk, unsigned *dest, int base)
 	}
 	*dest = (unsigned)ul;
 	return true;
+}
+
+bool shunk_isdigit(shunk_t s, size_t i)
+{
+	pexpect(s.len > 0);
+	pexpect(i < s.len);
+	const char *c = s.ptr;
+	return isdigit(c[i]);
+}
+
+bool shunk_ischar(shunk_t s, size_t i, const char *chars)
+{
+	pexpect(s.len > 0);
+	pexpect(i < s.len);
+	const char *c = s.ptr;
+	return strchr(chars, c[i]) != NULL;
 }

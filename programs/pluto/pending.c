@@ -7,6 +7,7 @@
  * Copyright (C) 2012-2018 Paul Wouters <pwouters@redhat.com>
  * Copyright (C) 2011 Anthony Tong <atong@TrustedCS.com>
  * Copyright (C) 2017-2018 Antony Antony <antony@phenome.org>
+ * Copyright (C) 2019 Andrew Cagney <cagney@gnu.org>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -32,7 +33,6 @@
 #include <arpa/nameser.h>       /* missing from <resolv.h> on old systems */
 #include <errno.h>
 
-#include <libreswan.h>
 
 #include "sysdep.h"
 #include "constants.h"
@@ -51,20 +51,19 @@
 #include "pluto_crypt.h"  /* for pluto_crypto_req & pluto_crypto_req_cont */
 #include "ikev2.h"
 #include "ip_address.h"
+#include "hostpair.h"
 
 /*
  * queue an IPsec SA negotiation pending completion of a
  * suitable phase 1 (IKE SA)
  */
 void add_pending(fd_t whack_sock,
-		 struct state *isakmp_sa,
+		 struct ike_sa *ike,
 		 struct connection *c,
 		 lset_t policy,
 		 unsigned long try,
 		 so_serial_t replacing
-#ifdef HAVE_LABELED_IPSEC
 		 , struct xfrm_user_sec_ctx_ike *uctx
-#endif
 		 )
 {
 	struct pending *p, **pp;
@@ -73,7 +72,7 @@ void add_pending(fd_t whack_sock,
 	pp = host_pair_first_pending(c);
 
 	for (p = pp ? *pp : NULL; p != NULL; p = p->next) {
-		if (p->connection == c && p->isakmp_sa == isakmp_sa) {
+		if (p->connection == c && p->ike == ike) {
 			DBG(DBG_CONTROL, {
 				ipstr_buf b;
 				char cib[CONN_INST_BUF];
@@ -90,23 +89,22 @@ void add_pending(fd_t whack_sock,
 		ipstr_buf b;
 		char ciba[CONN_INST_BUF];
 		char cibb[CONN_INST_BUF];
-		struct connection *cb = isakmp_sa->st_connection;
+		struct connection *cb = ike->sa.st_connection;
 		DBG_log("Queuing pending IPsec SA negotiating with %s \"%s\"%s IKE SA #%lu \"%s\"%s",
 			ipstr(&c->spd.that.host_addr, &b),
 			c->name, fmt_conn_instance(c, ciba),
-			isakmp_sa->st_serialno,
+			ike->sa.st_serialno,
 			cb->name, fmt_conn_instance(cb, cibb));
 		});
 
 	p = alloc_thing(struct pending, "struct pending");
 	p->whack_sock = whack_sock;
-	p->isakmp_sa = isakmp_sa;
+	p->ike = ike;
 	p->connection = c;
 	p->policy = policy;
 	p->try = try;
 	p->replacing = replacing;
 	p->pend_time = mononow();
-#ifdef HAVE_LABELED_IPSEC
 	p->uctx = NULL;
 	if (uctx != NULL) {
 		p->uctx = clone_thing(*uctx, "pending security context");
@@ -115,7 +113,6 @@ void add_pending(fd_t whack_sock,
 			    p->uctx->sec_ctx_value,
 			    p->uctx->ctx.ctx_len));
 	}
-#endif
 
 	host_pair_enqueue_pending(c, p, &p->next);
 }
@@ -158,16 +155,13 @@ void release_pending_whacks(struct state *st, err_t story)
 		LSWDBGP(DBG_CONTROL, buf) {
 			lswlogf(buf, "%s: state #%lu stat("PRI_FD") failed ",
 				__func__, st->st_serialno, PRI_fd(st->st_whack_sock));
-			lswlog_errno(buf, e);
+			jam(buf, " "PRI_ERRNO, pri_errno(e));
 		}
 		/* presumably dead */
 		st->st_whack_sock = null_fd;
 		zero(&stst);
 	} else {
-		dbg("%s: state #%lu "PRI_FD" .st_dev=%lu .st_ino=%lu",
-		     __func__, st->st_serialno, PRI_fd(st->st_whack_sock),
-		     (unsigned long)stst.st_dev, (unsigned long)stst.st_ino);
-		release_whack(st);
+		release_any_whack(st, HERE, "releasing pending whacks");
 	}
 
 	/*
@@ -184,7 +178,7 @@ void release_pending_whacks(struct state *st, err_t story)
 	if (IS_CHILD_SA(st)) {
 		struct ike_sa *ike = ike_sa(st);
 		if (same_fd(&stst, ike->sa.st_whack_sock)) {
-			release_whack(&ike->sa);
+			release_any_whack(&ike->sa, HERE, "release pending whacks state's IKE SA");
 		}
 	}
 
@@ -207,10 +201,10 @@ void release_pending_whacks(struct state *st, err_t story)
 		return;
 	for (struct pending *p = *pp; p != NULL; p = p->next) {
 		dbg("%s: IKE SA #%lu "PRI_FD" has pending CHILD SA with socket "PRI_FD,
-		    __func__, p->isakmp_sa->st_serialno,
-		    PRI_fd(p->isakmp_sa->st_whack_sock),
+		    __func__, p->ike->sa.st_serialno,
+		    PRI_fd(p->ike->sa.st_whack_sock),
 		    PRI_fd(p->whack_sock));
-		if (p->isakmp_sa == st && fd_p(p->whack_sock)) {
+		if (&p->ike->sa == st && fd_p(p->whack_sock)) {
 			if (!same_fd(&stst, p->whack_sock)) {
 				passert(!fd_p(whack_log_fd));
 				whack_log_fd = p->whack_sock;
@@ -256,10 +250,7 @@ static void delete_pending(struct pending **pp)
 		}
 	});
 
-#ifdef HAVE_LABELED_IPSEC
 	pfreeany(p->uctx);
-#endif
-
 	pfree(p);
 }
 
@@ -274,28 +265,25 @@ static void delete_pending(struct pending **pp)
  *     In IKEv2 it called when AUTH is complete, child is established.
  *     Established child get removed not unpend.
  */
-void unpend(struct state *st, struct connection *cc)
+void unpend(struct ike_sa *ike, struct connection *cc)
 {
 	struct pending **pp, *p;
 	char *what ="unqueuing";
 
 	if (cc == NULL) {
-		DBG(DBG_CONTROL, DBG_log("unpending state #%lu",
-					st->st_serialno));
+		dbg("unpending state #%lu", ike->sa.st_serialno);
 	} else {
-		char cib[CONN_INST_BUF];
-		DBG(DBG_CONTROL,
-			DBG_log("unpending state #%lu connection \"%s\"%s",
-				st->st_serialno, cc->name,
-				fmt_conn_instance(cc, cib)));
+		connection_buf cib;
+		dbg("unpending state #%lu connection "PRI_CONNECTION"",
+		    ike->sa.st_serialno, pri_connection(cc, &cib));
 	}
 
-	for (pp = host_pair_first_pending(st->st_connection);
+	for (pp = host_pair_first_pending(ike->sa.st_connection);
 	     (p = *pp) != NULL; )
 	{
-		if (p->isakmp_sa == st) {
+		if (p->ike == ike) {
 			p->pend_time = mononow();
-			switch (st->st_ike_version) {
+			switch (ike->sa.st_ike_version) {
 			case IKEv2:
 				if (cc != p->connection) {
 					ikev2_initiate_child_sa(p);
@@ -310,23 +298,21 @@ void unpend(struct state *st, struct connection *cc)
 				}
 				break;
 			case IKEv1:
-				quick_outI1(p->whack_sock, st, p->connection,
+				quick_outI1(p->whack_sock, &ike->sa, p->connection,
 					    p->policy,
 					    p->try, p->replacing
-#ifdef HAVE_LABELED_IPSEC
 					    , p->uctx
-#endif
 					    );
 				break;
 			default:
-				bad_case(st->st_ike_version);
+				bad_case(ike->sa.st_ike_version);
 			}
 			DBG(DBG_CONTROL, {
 				ipstr_buf b;
 				char cib[CONN_INST_BUF];
 				DBG_log("%s pending %s with %s \"%s\"%s",
 					what,
-					st->st_ikev2 ? "Child SA" : "Quick Mode",
+					(ike->sa.st_ike_version == IKEv2) ? "Child SA" : "Quick Mode",
 					ipstr(&p->connection->spd.that.host_addr, &b),
 					p->connection->name,
 					fmt_conn_instance(p->connection, cib));
@@ -341,19 +327,18 @@ void unpend(struct state *st, struct connection *cc)
 	}
 }
 
-struct connection *first_pending(const struct state *st,
+struct connection *first_pending(const struct ike_sa *ike,
 				 lset_t *policy,
 				 fd_t *p_whack_sock)
 {
 	struct pending **pp, *p;
 
-	DBG(DBG_DPD,
-	    DBG_log("getting first pending from state #%lu", st->st_serialno));
+	dbg("getting first pending from state #%lu", ike->sa.st_serialno);
 
-	for (pp = host_pair_first_pending(st->st_connection);
+	for (pp = host_pair_first_pending(ike->sa.st_connection);
 	     (p = *pp) != NULL; pp = &p->next)
 	{
-		if (p->isakmp_sa == st) {
+		if (p->ike == ike) {
 			*p_whack_sock = p->whack_sock;
 			*policy = p->policy;
 			return p->connection;
@@ -400,30 +385,30 @@ bool pending_check_timeout(const struct connection *c)
 }
 
 /* a Main Mode negotiation has been replaced; update any pending */
-void update_pending(struct state *os, struct state *ns)
+void update_pending(struct ike_sa *old_ike, struct ike_sa *new_ike)
 {
 	struct pending *p, **pp;
 
-	pp = host_pair_first_pending(os->st_connection);
+	pp = host_pair_first_pending(old_ike->sa.st_connection);
 	if (pp == NULL)
 		return;
 
 	for (p = *pp; p != NULL; p = p->next)
-		if (p->isakmp_sa == os)
-			p->isakmp_sa = ns;
+		if (p->ike == old_ike)
+			p->ike = new_ike;
 }
 
 /* a Main Mode negotiation has failed; discard any pending */
-void flush_pending_by_state(struct state *st)
+void flush_pending_by_state(struct ike_sa *ike)
 {
 	struct pending **pp, *p;
 
-	pp = host_pair_first_pending(st->st_connection);
+	pp = host_pair_first_pending(ike->sa.st_connection);
 	if (pp == NULL)
 		return;
 
 	while ((p = *pp) != NULL) {
-		if (p->isakmp_sa == st) {
+		if (p->ike == ike) {
 			/* we don't have to worry about deref to free'ed
 			 * *pp, because delete_pending updates pp to
 			 * point to the next element before it frees *pp
@@ -454,7 +439,7 @@ void flush_pending_by_connection(const struct connection *c)
 	}
 }
 
-void show_pending_phase2(const struct connection *c, const struct state *st)
+void show_pending_phase2(const struct connection *c, const struct ike_sa *ike)
 {
 	struct pending **pp, *p;
 
@@ -463,14 +448,14 @@ void show_pending_phase2(const struct connection *c, const struct state *st)
 		return;
 
 	for (p = *pp; p != NULL; p = p->next) {
-		if (p->isakmp_sa == st) {
+		if (p->ike == ike) {
 			/* connection-name state-number [replacing state-number] */
 			char cip[CONN_INST_BUF];
 			fmt_conn_instance(p->connection, cip);
 
 			LSWLOG_WHACK(RC_COMMENT, buf) {
-				lswlogf(buf, "#%lu: pending ", p->isakmp_sa->st_serialno);
-				lswlogs(buf, st->st_ikev2 ? "CHILD SA" : "Phase 2");
+				lswlogf(buf, "#%lu: pending ", p->ike->sa.st_serialno);
+				lswlogs(buf, (ike->sa.st_ike_version == IKEv2) ? "CHILD SA" : "Phase 2");
 				lswlogf(buf, " for \"%s\"%s", p->connection->name,
 					cip);
 				if (p->replacing != SOS_NOBODY) {

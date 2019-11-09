@@ -24,6 +24,13 @@ LIBRESWANSRCDIR?=$(shell pwd)
 
 include ${LIBRESWANSRCDIR}/Makefile.inc
 
+MAIN_RPM_VERSION = $(shell make showversion | sed "s/-.*//")
+MAIN_RPM_PREVER = $(shell make showversion | sed -e  "s/^.[^-]*-\([^-]*\)-\(.*\)/rc\1_\2/" -e "s/-/_/")
+MAIN_RPM_PREFIX  = libreswan-$(MAIN_RPM_VERSION)$(MAIN_RPM_PREVER)
+MAIN_RPM_RHEL_PKG = $(shell rpm -qf /etc/redhat-release)
+MAIN_RPM_RHEL_VERSION = $(shell echo $(MAIN_RPM_RHEL_PKG) | sed "s/.*-release-\(.\).*/\1/")
+MAIN_RPM_SPECFILE = $(shell if [ -f /etc/fedora-release ]; then echo packaging/fedora/libreswan.spec; elif [ -n "$(MAIN_RPM_RHEL_VERSION)" ]; then echo packaging/rhel/$(MAIN_RPM_RHEL_VERSION)/libreswan.spec; else echo "unknown distro, cannot find spec file to use in packaging directory"; fi)
+
 SRCDIR?=$(shell pwd)/
 
 # dummy default rule
@@ -128,9 +135,24 @@ buildready:
 	# obsolete cd doc ; $(MAKE) -s
 
 rpm:
-	@echo To build an rpm, use: rpmbuild -ba packaging/XXX/libreswan.spec
-	@echo where XXX is your rpm based vendor
-	rpmbuild -bs packaging/fedora/libreswan.spec
+	# would be nice if we could support ~/.rpmmacros here
+	@echo building rpm for libreswan testing
+	mkdir -p ~/rpmbuild/SPECS/
+	sed  -e "s/^Version:.*/Version: $(MAIN_RPM_VERSION)/g" \
+	     -e "s/^#global prever.*/%global prever $(MAIN_RPM_PREVER)/" \
+	     -e "s/^Release:.*/Release: 0.$(MAIN_RPM_PREVER)/" \
+		$(MAIN_RPM_SPECFILE) > ~/rpmbuild/SPECS/libreswan.spec
+	mkdir -p ~/rpmbuild/SOURCES
+	git archive --format=tar --prefix=libreswan-$(MAIN_RPM_VERSION)$(MAIN_RPM_PREVER)/ \
+		-o ~/rpmbuild/SOURCES/libreswan-$(MAIN_RPM_VERSION)$(MAIN_RPM_PREVER).tar HEAD
+	if [ -a Makefile.inc.local ] ; then \
+		tar --transform "s|^|$(MAIN_RPM_PREFIX)/|" -rf ~/rpmbuild/SOURCES/$(MAIN_RPM_PREFIX).tar Makefile.inc.local ; \
+	fi;
+	echo 'IPSECBASEVERSION=$(MAIN_RPM_VERSION)$(MAIN_RPM_PREVER)' > ~/rpmbuild/SOURCES/version.mk
+	( pushd ~/rpmbuild/SOURCES; tar --transform "s|^|$(MAIN_RPM_PREFIX)/mk/|" -rf ~/rpmbuild/SOURCES/$(MAIN_RPM_PREFIX).tar version.mk; popd)
+	rm ~/rpmbuild/SOURCES/version.mk
+	gzip -f ~/rpmbuild/SOURCES/$(MAIN_RPM_PREFIX).tar
+	rpmbuild -ba ~/rpmbuild/SPECS/libreswan.spec
 
 tarpkg:
 	@echo "Generating tar.gz package to install"
@@ -163,15 +185,21 @@ showobjdir:
 
 # these need to move elsewhere and get fixed not to use root
 
-deb:
+.PHONY: deb-prepare
+DEBIPSECBASEVERSION=$(shell make -s showdebversion)
+deb-prepare:
 	cp -r packaging/debian .
+	cat debian/changelog
 	grep "IPSECBASEVERSION" debian/changelog && \
-		sed -i "s/@IPSECBASEVERSION@/`make -s showdebversion`/g" debian/changelog || \
+		sed -i "s/@IPSECBASEVERSION@/$(DEBIPSECBASEVERSION)/g" debian/changelog || \
 		echo "missing IPSECBASEVERSION in debian/changelog. This is not git repository?"
+	cat debian/changelog
+
+.PHONY: deb
+deb: deb-prepare
 	debuild -i -us -uc -b
 	rm -fr debian
 	#debuild -S -sa
-	@echo "to build optional KLIPS kernel module, run make deb-klips"
 
 release:
 	packaging/utils/makerelease

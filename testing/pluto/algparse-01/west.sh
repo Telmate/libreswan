@@ -1,10 +1,10 @@
 ../../guestbin/swan-prep
 
 # run the parser tests
-../bin/algparse.sh /usr/local/libexec/ipsec/algparse algparse*.txt
+../bin/algparse.sh 'ipsec algparse' algparse*.txt > /dev/null
 
 # run the algorithm tests
-/usr/local/libexec/ipsec/algparse -ta
+ipsec algparse -ta > /dev/null
 
 # check pluto is starting in the correct mode
 ipsec start

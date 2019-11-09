@@ -21,5 +21,6 @@
 size_t lswlog_to_file_stream(struct lswlog *buf, FILE *file)
 {
 	lswlogs(buf, "\n");
-	return fwrite(buf->array, buf->len, 1, file);
+	shunk_t out = jambuf_as_shunk(buf);
+	return fwrite(out.ptr, out.len, 1, file);
 }

@@ -2,6 +2,8 @@
  * addresses to text
  * Copyright (C) 2000  Henry Spencer.
  * Copyright (C) 2012 Paul Wouters <paul@libreswan.org>
+ * Copyright (C) 2019 Andrew Cagney <cagney@gnu.org>
+ * Copyright (C) 2019 D. Hugh Redelmeier <hugh@mimosa.com>
  *
  * This library is free software; you can redistribute it and/or modify it
  * under the terms of the GNU Library General Public License as published by
@@ -25,72 +27,11 @@
 #define IP6BYTES        16      /* bytes in an IPv6 address */
 
 /* forwards */
-static size_t normal4(const unsigned char *s, size_t len, char *b, char **dp);
-static size_t normal6(const unsigned char *s, size_t len, char *b, char **dp,
+static size_t normal4(const unsigned char *s, size_t len, char *b, const char **dp);
+static size_t normal6(const unsigned char *s, size_t len, char *b, const char **dp,
 		      int squish);
-static size_t reverse4(const unsigned char *s, size_t len, char *b, char **dp);
-static size_t reverse6(const unsigned char *s, size_t len, char *b, char **dp);
-
-/*
-   - addrtot - convert binary address to text (dotted decimal or IPv6 string)
- */
-size_t                          /* space needed for full conversion */
-addrtot(src, format, dst, dstlen)
-const ip_address * src;
-int format;                     /* character */
-char *dst;                      /* need not be valid if dstlen is 0 */
-size_t dstlen;
-{
-	const unsigned char *b;
-	size_t n;
-	char buf[1 + ADDRTOT_BUF + 1];      /* :address: */
-	char *p;
-	int t = addrtypeof(src);
-#       define  TF(t, f)        (((t) << 8) | (f))
-
-	n = addrbytesptr_read(src, &b);
-	if (n == 0) {
-		dst[0] = '\0';
-		strncat(dst, "<invalid>", dstlen - 1); /* we hope possible truncation does not cause problems */
-		return sizeof("<invalid>");
-	}
-
-	switch (TF(t, format)) {
-	case TF(AF_INET, 0):
-		n = normal4(b, n, buf, &p);
-		break;
-	case TF(AF_INET6, 0):
-		n = normal6(b, n, buf, &p, 1);
-		break;
-	case TF(AF_INET, 'Q'):
-		n = normal4(b, n, buf, &p);
-		break;
-	case TF(AF_INET6, 'Q'):
-		n = normal6(b, n, buf, &p, 0);
-		break;
-	case TF(AF_INET, 'r'):
-		n = reverse4(b, n, buf, &p);
-		break;
-	case TF(AF_INET6, 'r'):
-		n = reverse6(b, n, buf, &p);
-		break;
-	default:                                        /* including (AF_INET, 'R') */
-		dst[0] = '\0';
-		strncat(dst, "<invalid>", dstlen - 1);  /* we hope possible truncation does not cause problems */
-		return sizeof("<invalid>");
-	}
-
-	if (dstlen > 0) {
-		if (dstlen < n)
-			p[dstlen - 1] = '\0';
-		/*
-		 * clang 3.4 thinks dst or p are uninitialized.
-		 * I don't see how -- DHR
-		 */
-		strcpy(dst, p);
-	}
-	return n;
-}
+static size_t reverse4(const unsigned char *s, size_t len, char *b, const char **dp);
+static size_t reverse6(const unsigned char *s, size_t len, char *b, const char **dp);
 
 /*
    - inet_addrtot - convert binary inet address to text (dotted decimal or IPv6 string)
@@ -103,54 +44,48 @@ int format;             /* character */
 char *dst;              /* need not be valid if dstlen is 0 */
 size_t dstlen;
 {
-	size_t n;
 	char buf[1 + ADDRTOT_BUF + 1];      /* :address: */
-	char *p;
 
-#       define  TF(t, f)        (((t) << 8) | (f))
+	/* initialize for cases not handled */
+	const char *p = "<invalid>";
+	size_t n = sizeof("<invalid>") - 1;
 
 	switch (t) {
-	case AF_INET: n = IP4BYTES;
+	case AF_INET:
+		switch (format) {
+		case 0:
+		case 'Q':
+			n = normal4(src, IP4BYTES, buf, &p);
+			break;
+		case 'r':
+			n = reverse4(src, IP4BYTES, buf, &p);
+			break;
+		}
 		break;
-	case AF_INET6: n = IP6BYTES;
-		break;
-	default:
-		dst[0] = '\0';
-		strncat(dst, "<invalid>", dstlen - 1); /* we hope possible truncation does not cause problems */
-		return sizeof("<invalid>");
-	}
 
-	switch (TF(t, format)) {
-	case TF(AF_INET, 0):
-		n = normal4(src, n, buf, &p);
+	case AF_INET6:
+		switch (format) {
+		case 0:
+			n = normal6(src, IP6BYTES, buf, &p, 1);
+			break;
+		case 'Q':
+			n = normal6(src, IP6BYTES, buf, &p, 0);
+			break;
+		case 'r':
+			n = reverse6(src, IP6BYTES, buf, &p);
+			break;
+		}
 		break;
-	case TF(AF_INET6, 0):
-		n = normal6(src, n, buf, &p, 1);
-		break;
-	case TF(AF_INET, 'Q'):
-		n = normal4(src, n, buf, &p);
-		break;
-	case TF(AF_INET6, 'Q'):
-		n = normal6(src, n, buf, &p, 0);
-		break;
-	case TF(AF_INET, 'r'):
-		n = reverse4(src, n, buf, &p);
-		break;
-	case TF(AF_INET6, 'r'):
-		n = reverse6(src, n, buf, &p);
-		break;
-	default:                                        /* including (AF_INET, 'R') */
-		dst[0] = '\0';
-		strncat(dst, "<invalid>", dstlen - 1);  /* we hope possible truncation does not cause problems */
-		return sizeof("<invalid>");
 	}
 
 	if (dstlen > 0) {
-		if (dstlen < n)
-			p[dstlen - 1] = '\0';
-		strcpy(dst, p);	/* clang 6.0.0 mistakenly thinks p is undefined */
+		/* make dstlen actual result length, including NUL */
+		if (dstlen > n)
+			dstlen = n + 1;
+		memcpy(dst, p, dstlen - 1);
+		dst[dstlen - 1] = '\0';
 	}
-	return n;
+	return n;	/* strlen(untruncated result) */
 }
 
 /*
@@ -193,7 +128,7 @@ normal4(srcp, srclen, buf, dstp)
 const unsigned char *srcp;
 size_t srclen;
 char *buf;                      /* guaranteed large enough */
-char **dstp;                    /* where to put result pointer */
+const char **dstp;                    /* where to put result pointer */
 {
 	int i;
 	char *p;
@@ -219,7 +154,7 @@ normal6(srcp, srclen, buf, dstp, squish)
 const unsigned char *srcp;
 size_t srclen;
 char *buf;                      /* guaranteed large enough, plus 2 */
-char **dstp;                    /* where to put result pointer */
+const char **dstp;                    /* where to put result pointer */
 int squish;                     /* whether to squish out 0:0 */
 {
 	int i;
@@ -269,8 +204,8 @@ static size_t                   /* size of text, including NUL */
 reverse4(srcp, srclen, buf, dstp)
 const unsigned char *srcp;
 size_t srclen;
-char *buf;                      /* guaranteed large enough */
-char **dstp;                    /* where to put result pointer */
+char *buf;	/* guaranteed large enough */
+const char **dstp;	/* where to put result pointer */
 {
 	int i;
 	char *p;
@@ -296,8 +231,8 @@ static size_t                   /* size of text, including NUL */
 reverse6(srcp, srclen, buf, dstp)
 const unsigned char *srcp;
 size_t srclen;
-char *buf;                      /* guaranteed large enough */
-char **dstp;                    /* where to put result pointer */
+char *buf;	/* guaranteed large enough */
+const char **dstp;	/* where to put result pointer */
 {
 	int i;
 	unsigned long piece;
@@ -318,92 +253,3 @@ char **dstp;                    /* where to put result pointer */
 	*dstp = buf;
 	return strlen(buf) + 1;
 }
-
-/*
-   - reverse6 - modern IPv6 reverse-lookup conversion (RFC 2874)
- * this version removed as it was obsoleted in the end.
- */
-
-#ifdef ADDRTOT_MAIN
-
-#include <stdio.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-
-void regress(void);
-
-int main(int argc, char *argv[])
-{
-	if (argc < 2) {
-		fprintf(stderr, "Usage: %s {addr|net/mask|begin...end|-r}\n",
-			argv[0]);
-		exit(2);
-	}
-
-	if (streq(argv[1], "-r")) {
-		regress();
-		fprintf(stderr, "regress() returned?!?\n");
-		exit(1);
-	}
-	exit(0);
-}
-
-struct rtab {
-	char *input;
-	char format;
-	char *output;                   /* NULL means error expected */
-} rtab[] = {
-	{ "1.2.3.0",                     0, "1.2.3.0" },
-	{ "1:2::3:4",                    0, "1:2::3:4" },
-	{ "1:2::3:4",                   'Q', "1:2:0:0:0:0:3:4" },
-	{ "1:2:0:0:3:4:0:0",             0, "1:2::3:4:0:0" },
-	{ "1.2.3.4",                    'r', "4.3.2.1.IN-ADDR.ARPA." },
-	/*                                    0 1 2 3 4 5 6 7 8 9 a b c d e f 0 1 2 3 4 5 6 7 8 9 a b c d e f */
-	{ "1:2::3:4",                   'r',
-	  "4.0.0.0.3.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.2.0.0.0.1.0.0.0.IP6.ARPA." },
-	{ NULL,                         0, NULL }
-};
-
-void regress(void)
-{
-	struct rtab *r;
-	int status = 0;
-	ip_address a;
-	char in[100];
-	char buf[100];
-	const char *oops;
-	size_t n;
-
-	for (r = rtab; r->input != NULL; r++) {
-		strcpy(in, r->input);
-
-		/* convert it *to* internal format */
-		oops = ttoaddr(in, strlen(in), AF_UNSPEC, &a);
-
-		/* now convert it back */
-
-		n = addrtot(&a, r->format, buf, sizeof(buf));
-
-		if (n == 0 && r->output == NULL) {
-		}                       /* okay, error expected */
-		else if (n == 0) {
-			printf("`%s' addrtot failed\n", r->input);
-			status = 1;
-
-		} else if (r->output == NULL) {
-			printf("`%s' addrtot succeeded unexpectedly '%c'\n",
-			       r->input, r->format);
-			status = 1;
-		} else {
-			if (!strcaseeq(r->output, buf)) {
-				printf("`%s' '%c' gave `%s', expected `%s'\n",
-				       r->input, r->format, buf, r->output);
-				status = 1;
-			}
-		}
-	}
-	exit(status);
-}
-
-#endif /* ADDRTOT_MAIN */

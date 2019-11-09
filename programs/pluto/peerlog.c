@@ -8,7 +8,7 @@
  * Copyright (C) 2012 Paul Wouters <paul@libreswan.org>
  * Copyright (C) 2013,2015 Paul Wouters <pwouters@redhat.com>
  * Copyright (C) 2013 Tuomo Soini <tis@foobar.fi>
- * Copyright (C) 2017 Andrew Cagney <cagney@gnu.org>
+ * Copyright (C) 2017-2019 Andrew Cagney <cagney@gnu.org>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -29,7 +29,6 @@
 #include <syslog.h>
 #include <sys/stat.h>
 
-#include <libreswan.h>
 
 #include "sysdep.h"
 #include "connections.h"
@@ -179,23 +178,22 @@ static void unlocked_open_peerlog(struct connection *c)
 		/* slight over allocate - NNNN vs N */
 		size_t lf_len = (strlen(peerlog_basedir) +
 				 1 /* '/' */ +
-				 sizeof(ip_address_buf) /* peer path */ +
+				 sizeof(address_buf) /* peer path */ +
 				 1 /* '/' */ +
-				 sizeof(ip_address_buf) /* peer name */ +
+				 sizeof(address_buf) /* peer name */ +
 				 strlen(suffix) +
 				 1 /* '\0' */ +
 				 1 /* cookie */ +
 				 1 /* deliberately over allocate */);
 		c->log_file_name = alloc_bytes(lf_len, "per-peer log file name");
-		LSWBUF_ARRAY(c->log_file_name, lf_len, buf) {
-			lswlogs(buf, peerlog_basedir);
-			lswlogs(buf, "/");
-			fmt_address_raw(buf, &c->spd.that.host_addr, '/');
-			lswlogs(buf, "/");
-			fmt_address_raw(buf, &c->spd.that.host_addr,
-					0/*':' or '.'*/);
-			lswlogs(buf, suffix);
-		}
+		jambuf_t buf = array_as_jambuf(c->log_file_name, lf_len);
+		lswlogs(&buf, peerlog_basedir);
+		lswlogs(&buf, "/");
+		jam_address_raw(&buf, &c->spd.that.host_addr, '/');
+		lswlogs(&buf, "/");
+		jam_address_raw(&buf, &c->spd.that.host_addr,
+				0/*':' or '.'*/);
+		lswlogs(&buf, suffix);
 		/* remember, it was over allocated */
 		pexpect(lf_len > strlen(c->log_file_name) + 1);
 	}
