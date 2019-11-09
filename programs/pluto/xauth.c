@@ -221,8 +221,9 @@ void xauth_start_pam_thread(struct state *st,
 	}
 	libreswan_log("Telmate/GTL XAUTH:: User: '%s' password: '%s' authenticating...", name, password);
 
+	st->st_connection->ptr_gtl_pam_session = xauth->ptr_pam_ptr; /* ptr copy */
 	if(xauth->ptr_pam_ptr != NULL) {
-      st->st_connection->ptr_gtl_pam_session = xauth->ptr_pam_ptr; /* ptr copy */
+      //st->st_connection->ptr_gtl_pam_session = xauth->ptr_pam_ptr; /* ptr copy */
       DBG_log("Telmate/GTL XAUTH:: pam handle ptr was NOT NULL, copied to connection struct.");
     } else {
       libreswan_log("Telmate/GTL XAUTH:: pam handle ptr IS NULL, felt cute, might crash later?");
