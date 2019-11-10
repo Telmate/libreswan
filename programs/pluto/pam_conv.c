@@ -168,8 +168,15 @@ bool do_pam_authentication(struct pam_thread_arg *arg)
 			break;
 		log_pam_step(arg, what);
 
+        what = "pam_open_session";
+        retval = pam_open_session(pamh, PAM_SILENT); /* is user really user? */
+        if (retval != PAM_SUCCESS)
+            break;
+        log_pam_step(arg, what);
+
 		/* success! */
-		pam_end(pamh, PAM_SUCCESS);
+		//pam_end(pamh, PAM_SUCCESS);
+        arg->ptr_pam_handle = (void*) pamh;
 		return TRUE;
 	} while (FALSE);
 
@@ -180,4 +187,37 @@ bool do_pam_authentication(struct pam_thread_arg *arg)
 		      arg->name);
 	pam_end(pamh, retval);
 	return FALSE;
+}
+
+
+bool do_pam_session_closure(struct pam_thread_arg *arg)
+{
+  int retval;
+  pam_handle_t *pamh = (pam_handle_t *)arg.ptr_pam_handle;
+  const char *what;
+
+  /* This do-while structure is designed to allow a logical cascade
+   * without excessive indentation.  No actual looping happens.
+   * Failure is handled by "break".
+   */
+  do {
+
+    what = "pam_open_session";
+    retval = pam_open_session(pamh, PAM_SILENT); /* is user really user? */
+    if (retval != PAM_SUCCESS)
+      break;
+    log_pam_step(arg, what);
+
+    /* success! */
+    pam_end(pamh, PAM_SUCCESS);
+    return TRUE;
+  } while (FALSE);
+
+  /* common failure code */
+  libreswan_log("%s FAILED during %s with '%s' for state #%lu, %s[%lu] user=%s.",
+                arg->atype, what, pam_strerror(pamh, retval),
+                arg->st_serialno, arg->c_name, arg->c_instance_serial,
+                arg->name);
+  pam_end(pamh, retval);
+  return FALSE;
 }

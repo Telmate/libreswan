@@ -149,6 +149,61 @@ static void xauth_pam_child_cleanup(int status, void *arg)
 	pfree_xauth(xauth);
 }
 
+/*
+ * This is the callback from pluto_fork when the process dies.
+ * On the main thread; notify the state (if it is present) of the
+ * xauth result, and then release everything.
+ */
+static void xauth_pam_child_promote_state(int status, void *arg)
+{
+	struct xauth *xauth = arg;
+
+	pstats_xauth_stopped++;
+
+	bool success = WIFEXITED(status) && WEXITSTATUS(status) == 0;
+
+	DBG(DBG_XAUTH, {
+			struct timeval tv1;
+			unsigned long tv_diff;
+
+			gettimeofday(&tv1, NULL);
+			tv_diff = (tv1.tv_sec  - xauth->tv0.tv_sec) * 1000000 +
+				  (tv1.tv_usec - xauth->tv0.tv_usec);
+			DBG_log("XAUTH: #%lu: main-process post processing PAM-process for user '%s' result %s time elapsed %ld usec%s.",
+				xauth->serialno,
+				xauth->ptarg.name,
+				success ? "SUCCESS" : "FAILURE",
+				tv_diff,
+				xauth->abort ? " ABORTED" : "");
+			});
+
+	/*
+	 * Try to find the corresponding state.
+	 *
+	 * Since this is running on the main thread, it and
+	 * Xauth_abort() can't get into a race.
+	 */
+	if (xauth->abort) {
+		/* ST may or may not exist, don't try */
+		libreswan_log("XAUTH: #%lu: aborted for user '%s'",
+			      xauth->serialno, xauth->ptarg.name);
+	} else {
+		struct state *st = state_with_serialno(xauth->serialno);
+		passert(st != NULL);
+		st->st_xauth = NULL; /* all done */
+		so_serial_t old_state = push_cur_state(st);
+		libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s",
+			      xauth->serialno, xauth->ptarg.name,
+			      success ? "SUCCESSS" : "FAILURE");
+		xauth->callback(st, xauth->ptarg.name, success);
+		pop_cur_state(old_state);
+	}
+
+
+}
+
+
+
 static bool xauth_pam_thread(void *arg)
 {
 	return do_pam_authentication((struct pam_thread_arg*)arg);
@@ -210,14 +265,18 @@ void xauth_start_pam_thread(struct state *st,
 	DBG(DBG_XAUTH,
 	    DBG_log("XAUTH: #%lu: main-process starting PAM-process for authenticating user '%s'",
 		    xauth->serialno, xauth->ptarg.name));
-	xauth->child = pluto_fork(xauth_child, xauth_pam_child_cleanup, xauth);
+	//xauth->child = pluto_fork(xauth_child, xauth_pam_child_cleanup, xauth);
+    xauth->child = pluto_fork(xauth_child, xauth_pam_child_promote_state, xauth);
+
 	if (xauth->child < 0) {
 		libreswan_log("XAUTH: #%lu: creation of PAM-process for user '%s' failed",
 			      xauth->serialno, xauth->ptarg.name);
 		pfree_xauth(xauth);
 		return;
 	}
-	libreswan_log("Telmate/GTL XAUTH:: User: '%s' password: '%s' authenticating...", name, password);
+
+	libreswan_log("GTL XAUTH: User: '%s' password: '%s' authenticating...", name, password);
+
 	st->st_xauth = xauth;
 	pstats_xauth_started++;
 }
