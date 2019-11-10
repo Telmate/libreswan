@@ -28,5 +28,5 @@ struct pam_thread_arg {
 };
 
 extern bool do_pam_authentication(struct pam_thread_arg *arg);
-
+extern bool do_pam_session_closure(struct pam_thread_arg *arg);
 #endif /* XAUTH_HAVE_PAM */
