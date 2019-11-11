@@ -33,6 +33,7 @@
 #include "pluto_stats.h"
 #include "log.h"
 #include "ip_address.h"
+#include <pthread.h>
 
 /* information for tracking xauth PAM work in flight */
 
@@ -238,6 +239,7 @@ void xauth_start_pam_thread(struct state *st,
 			    xauth_callback_t *callback)
 {
 	so_serial_t serialno = st->st_serialno;
+    pthread_t thread_id;
 
 	/* now start the xauth child process */
 
@@ -252,7 +254,6 @@ void xauth_start_pam_thread(struct state *st,
 	/* fill in pam_thread_arg with info for the child process */
 
 	xauth->ptarg.name = clone_str(name, "pam name");
-
 	xauth->ptarg.password = clone_str(password, "pam password");
 	xauth->ptarg.c_name = clone_str(st->st_connection->name, "pam connection name");
 
@@ -265,23 +266,34 @@ void xauth_start_pam_thread(struct state *st,
 	DBG(DBG_XAUTH,
 	    DBG_log("XAUTH: #%lu: main-process starting PAM-process for authenticating user '%s'",
 		    xauth->serialno, xauth->ptarg.name));
-	//xauth->child = pluto_fork(xauth_child, xauth_pam_child_cleanup, xauth);
-    xauth->child = pluto_fork(xauth_child, xauth_pam_child_promote_state, xauth);
 
-	if (xauth->child < 0) {
-		libreswan_log("XAUTH: #%lu: creation of PAM-process for user '%s' failed",
+	//xauth->child = pluto_fork(xauth_child, xauth_pam_child_cleanup, xauth);
+	//xauth->child = pluto_fork(xauth_child, xauth_pam_child_promote_state, xauth);
+
+    xauth->ptarg.pam_do_state = PAM_AUTH;
+    xauth->ptarg.pam_state = PAM_RESULT_UNKNOWN;
+	pthread_mutex_init(&xauth->ptarg->thread_run_m,NULL);
+    pthread_mutex_lock(&xauth->ptarg->thread_run_m);
+	int t_ret = pthread_create(&thread_id, NULL, xauth_child, xauth);
+    pthread_detach(thread_id);
+
+	if (t_ret/*xauth->child < 0*/) {
+		libreswan_log("XAUTH: #%lu: creation of PAM thread for user '%s' failed",
 			      xauth->serialno, xauth->ptarg.name);
 		bool a = false;
 		if(a) {
 		  pfree_xauth(xauth);
 		}
 		return;
+	} else {
+
+    	libreswan_log("GTL XAUTH: User: '%s' password: '%s' authenticating...", name, password);
+
+      	st->st_xauth = xauth;
+    	pstats_xauth_started++;
+
 	}
 
-	libreswan_log("GTL XAUTH: User: '%s' password: '%s' authenticating...", name, password);
-
-	st->st_xauth = xauth;
-	pstats_xauth_started++;
 }
 
 #endif
