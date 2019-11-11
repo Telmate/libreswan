@@ -28,14 +28,14 @@ enum pam_state_t {
 
 enum pam_result_state_t {
     PAM_AUTH_SUCCESS = 0,
-    PAM_AUTH_FAIL = 1
+    PAM_AUTH_FAIL = 1,
     PAM_SESSION_START_SUCCESS = 2,
-    PAM_SESSION_START_FAIL = 3
+    PAM_SESSION_START_FAIL = 3,
     PAM_SESSION_END_SUCCESS = 4,
     PAM_SESSION_END_FAIL = 5,
     PAM_TERM_SUCCESS = 6,
     PAM_TERM_FAIL = 7,
-    PAM_RESULT_UNKNOWN 8
+    PAM_RESULT_UNKNOWN = 8
 };
 
 struct pam_thread_arg {
@@ -48,12 +48,12 @@ struct pam_thread_arg {
 	const char *atype;  /* string XAUTH or IKEv2 */
 	void *ptr_pam_handle;
 	pthread_mutex_t thread_run_m;
-    pam_state_t pam_do_state;
-    pam_result_state_t pam_state;
+    	enum pam_state_t pam_do_state;
+    	enum pam_result_state_t pam_state;
 };
 
 extern bool do_pam_authentication(struct pam_thread_arg *arg);
 extern bool do_pam_session_closure(struct pam_thread_arg *arg);
-extern void pam_thread(struct pam_thread_arg *arg);
+extern void *pam_thread(void *parg);
 int thread_operation(pthread_mutex_t *mx);
 #endif /* XAUTH_HAVE_PAM */

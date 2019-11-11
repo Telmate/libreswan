@@ -37,6 +37,7 @@
 #include <pthread.h>
 #include <time.h>
 #include <unistd.h>
+#include <asm/errno.h>
 
 /* BEWARE: This code is multi-threaded.
  *
@@ -241,12 +242,13 @@ int thread_operation(pthread_mutex_t *mx)
   return 1;
 }
 
-void pam_thread(struct pam_thread_arg *arg)
+//void pam_thread(struct pam_thread_arg *arg)
+void *pam_thread(void *parg)
 {
-  int retval;
+  struct pam_thread_arg *arg = (struct pam_thread_arg *) parg;	
+  int retval = -1;
   pam_handle_t *pamh = NULL;
   const char *what;
-  struct timespec ts;
   struct pam_conv conv;
 
   conv.conv = pam_conv;
@@ -259,15 +261,15 @@ void pam_thread(struct pam_thread_arg *arg)
 
     if(arg->pam_do_state == PAM_AUTH) {
       /* start PAM, create handle etc */
-      for (i = 0; i < 5; i++) {
-        what = "pam_start"
+      for (int i = 0; i < 5; i++) {
+        what = "pam_start";
         retval = pam_start("pluto", arg->name, &conv, &pamh);
         log_pam_step(arg, what);
         if (retval == PAM_SUCCESS) {
 
           /* Send the remote host address to PAM */
-          for (i = 0; i < 5; i++) {
-            what = "pam_set_item"
+          for (int i = 0; i < 5; i++) {
+            what = "pam_set_item";
             retval = pam_set_item(pamh, PAM_RHOST, arg->ra);
             log_pam_step(arg, what);
             if (retval == PAM_SUCCESS) {
@@ -275,14 +277,14 @@ void pam_thread(struct pam_thread_arg *arg)
               /* Two factor authentication - Check that the user is valid,
                * and then check if they are permitted access
                */
-              for (i = 0; i < 5; i++) {
-                what = "pam_authenticate"
+              for (int i = 0; i < 5; i++) {
+                what = "pam_authenticate";
                 retval = pam_authenticate(pamh, PAM_SILENT); /* is user really user? */
                 log_pam_step(arg, what);
                 if (retval == PAM_SUCCESS) {
 
-                  for (i = 0; i < 5; i++) {
-                    what = "pam_acct_mgmt"
+                  for (int i = 0; i < 5; i++) {
+                    what = "pam_acct_mgmt";
                     retval = pam_acct_mgmt(pamh, 0); /* permitted access? */
                     log_pam_step(arg, what);
                     if (retval == PAM_SUCCESS) {
@@ -312,8 +314,8 @@ void pam_thread(struct pam_thread_arg *arg)
 
     } else if(arg->pam_do_state == PAM_SESSION_START) {
 
-      for (i = 0; i < 5; i++) {
-        what = "pam_open_session"
+      for (int i = 0; i < 5; i++) {
+        what = "pam_open_session";
         retval = pam_open_session(pamh, PAM_SILENT);
         log_pam_step(arg, what);
         if (retval == PAM_SUCCESS) {
@@ -324,8 +326,8 @@ void pam_thread(struct pam_thread_arg *arg)
 
     } else if(arg->pam_do_state == PAM_SESSION_END) {
 
-      for (i = 0; i < 5; i++) {
-        what = "pam_close_session"
+      for (int i = 0; i < 5; i++) {
+        what = "pam_close_session";
         retval = pam_close_session(pamh, PAM_SILENT);
         log_pam_step(arg, what);
         if (retval == PAM_SUCCESS) {
@@ -335,7 +337,7 @@ void pam_thread(struct pam_thread_arg *arg)
       }
 
     } else if(arg->pam_do_state == PAM_TERM) {
-      what = "pam_end"
+      what = "pam_end";
       retval = pam_end(pamh, retval);
       log_pam_step(arg, what);
       if (retval == PAM_SUCCESS) {
@@ -346,10 +348,8 @@ void pam_thread(struct pam_thread_arg *arg)
 
     usleep(100000); // 100ms because, because we are efficient pffft.
 
-  } while(!thread_operation(arg->thread_run_m));
+  } while(!thread_operation(&arg->thread_run_m));
 
   libreswan_log("XAUTH: PAM thread completed pam_do_state=%d pam_state=%d", ((int)arg->pam_do_state),((int) arg->pam_state ));
-  
-  return NULL;
-
+  return NULL; 
 }

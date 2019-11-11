@@ -239,7 +239,7 @@ void xauth_start_pam_thread(struct state *st,
 			    xauth_callback_t *callback)
 {
 	so_serial_t serialno = st->st_serialno;
-    pthread_t thread_id;
+    	pthread_t thread_id;
 
 	/* now start the xauth child process */
 
@@ -272,9 +272,9 @@ void xauth_start_pam_thread(struct state *st,
 
     xauth->ptarg.pam_do_state = PAM_AUTH;
     xauth->ptarg.pam_state = PAM_RESULT_UNKNOWN;
-	pthread_mutex_init(&xauth->ptarg->thread_run_m,NULL);
-    pthread_mutex_lock(&xauth->ptarg->thread_run_m);
-	int t_ret = pthread_create(&thread_id, NULL, xauth_child, xauth);
+    pthread_mutex_init(&xauth->ptarg.thread_run_m,NULL);
+    pthread_mutex_lock(&xauth->ptarg.thread_run_m);
+    int t_ret = pthread_create(&thread_id, NULL, pam_thread, xauth);
     pthread_detach(thread_id);
 
 	if (t_ret/*xauth->child < 0*/) {
