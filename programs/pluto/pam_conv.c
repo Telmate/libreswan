@@ -193,7 +193,7 @@ bool do_pam_authentication(struct pam_thread_arg *arg)
 bool do_pam_session_closure(struct pam_thread_arg *arg)
 {
   int retval;
-  pam_handle_t *pamh = (pam_handle_t *)arg.ptr_pam_handle;
+  pam_handle_t *pamh = (pam_handle_t *)arg->ptr_pam_handle;
   const char *what;
 
   /* This do-while structure is designed to allow a logical cascade

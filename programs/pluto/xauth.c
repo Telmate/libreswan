@@ -101,7 +101,7 @@ void xauth_pam_abort(struct state *st, bool call_callback)
  * On the main thread; notify the state (if it is present) of the
  * xauth result, and then release everything.
  */
-static void xauth_pam_child_cleanup(int status, void *arg)
+/*static void xauth_pam_child_cleanup(int status, void *arg)
 {
 	struct xauth *xauth = arg;
 
@@ -124,20 +124,20 @@ static void xauth_pam_child_cleanup(int status, void *arg)
 				xauth->abort ? " ABORTED" : "");
 			});
 
-	/*
-	 * Try to find the corresponding state.
-	 *
-	 * Since this is running on the main thread, it and
-	 * Xauth_abort() can't get into a race.
-	 */
+	//
+	// Try to find the corresponding state.
+	//
+	// Since this is running on the main thread, it and
+	// Xauth_abort() can't get into a race.
+	//
 	if (xauth->abort) {
-		/* ST may or may not exist, don't try */
+		// ST may or may not exist, don't try 
 		libreswan_log("XAUTH: #%lu: aborted for user '%s'",
 			      xauth->serialno, xauth->ptarg.name);
 	} else {
 		struct state *st = state_with_serialno(xauth->serialno);
 		passert(st != NULL);
-		st->st_xauth = NULL; /* all done */
+		st->st_xauth = NULL; // all done 
 		so_serial_t old_state = push_cur_state(st);
 		libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s",
 			      xauth->serialno, xauth->ptarg.name,
@@ -147,7 +147,7 @@ static void xauth_pam_child_cleanup(int status, void *arg)
 	}
 
 	pfree_xauth(xauth);
-}
+}*/
 
 /*
  * This is the callback from pluto_fork when the process dies.
