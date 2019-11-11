@@ -287,7 +287,7 @@ void xauth_start_pam_thread(struct state *st,
 		return;
 	} else {
 
-	    xauth->ptarg->ptr_xauth = &xauth; // create a circular link to ourselves so we can release our resources when the session is completed.
+	    xauth->ptarg.ptr_xauth =(void**) &xauth; // create a circular link to ourselves so we can release our resources when the session is completed.
       	st->st_xauth = xauth;
 
     	pstats_xauth_started++;
