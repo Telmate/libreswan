@@ -91,7 +91,7 @@ void xauth_pam_abort(struct state *st, bool call_callback)
 				    st->st_serialno, xauth->ptarg.name));
 			xauth->callback(st, xauth->ptarg.name, false);
 		} else {
-			pfree_xauth(xauth);
+			//pfree_xauth(xauth);
 		}
 	}
 }
@@ -271,7 +271,7 @@ void xauth_start_pam_thread(struct state *st,
 	if (xauth->child < 0) {
 		libreswan_log("XAUTH: #%lu: creation of PAM-process for user '%s' failed",
 			      xauth->serialno, xauth->ptarg.name);
-		pfree_xauth(xauth);
+		//pfree_xauth(xauth);
 		return;
 	}
 

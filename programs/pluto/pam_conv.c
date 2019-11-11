@@ -185,7 +185,7 @@ bool do_pam_authentication(struct pam_thread_arg *arg)
 		      arg->atype, what, pam_strerror(pamh, retval),
 		      arg->st_serialno, arg->c_name, arg->c_instance_serial,
 		      arg->name);
-	pam_end(pamh, retval);
+	//pam_end(pamh, retval);
 	return FALSE;
 }
 
