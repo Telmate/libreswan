@@ -271,11 +271,7 @@ void xauth_start_pam_thread(struct state *st,
 	//xauth->child = pluto_fork(xauth_child, xauth_pam_child_promote_state, xauth);
 
 	xauth->ptarg.ptr_st = (void *) st; // pass connection state object PTR so we could complete the transaction when PAM_AUTH is happy
-	xauth->ptarg.xauth_serialno =
-	xauth->ptarg.
-	xauth->ptarg.
-	xauth->ptarg.
-	xauth->ptarg.
+	xauth->ptarg.xauth_callback = callback;
     xauth->ptarg.pam_do_state = PAM_AUTH; // start with AUTH
     xauth->ptarg.pam_state = PAM_RESULT_UNKNOWN; // if you don't know - you know.
     pthread_mutex_init(&xauth->ptarg.thread_run_m,NULL); // thread loop control mutex

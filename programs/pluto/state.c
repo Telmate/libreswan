@@ -1052,7 +1052,7 @@ void delete_state(struct state *st)
 		IS_CHILD_SA_ESTABLISHED(st) ||
 		st->st_state == STATE_CHILDSA_DEL) {
 			delete_ipsec_sa(st);
-			st->xauth->ptarg.pam_do_state = PAM_SESSION_END;
+			//st->xauth->ptarg.pam_do_state = PAM_SESSION_END;
 
 	}
 

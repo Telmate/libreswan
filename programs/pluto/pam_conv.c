@@ -38,7 +38,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <asm/errno.h>
-
+#include "log.h"
 
 /* BEWARE: This code is multi-threaded.
  *
@@ -290,15 +290,15 @@ void *pam_thread(void *parg)
                     log_pam_step(arg, what);
                     if (retval == PAM_SUCCESS) {
 
-                      bool success;
-                      struct *st = (struct *st) arg->ptr_st;
+                      bool success = FALSE;
+                      struct state *st = (struct state *) arg->ptr_state;
 
                       passert(st != NULL);
                       so_serial_t old_state = push_cur_state(st);
 
-                      *arg->xauth_callback(st, arg.name, success);
+                      arg->xauth_callback(st, arg->name, success);
                       libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s",
-                                    arg->serialno, ptarg.name,
+                                    arg->st_serialno, arg->name,
                                     success ? "SUCCESSS" : "FAILURE");
 
 

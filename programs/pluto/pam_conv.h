@@ -17,7 +17,14 @@
 
 #ifdef XAUTH_HAVE_PAM
 
-#include "xauth.h"
+//#include "xauth.h"
+#include "constants.h"
+struct state;
+
+typedef void xauth_callback_t(
+                struct state *st,
+                const char *,
+                bool success);
 
 enum pam_state_t {
     PAM_AUTH = 0,
@@ -50,10 +57,10 @@ struct pam_thread_arg {
 	const char *atype;  /* string XAUTH or IKEv2 */
 
 	/* PAM threading args, Avi Saranga. avi@ */
-
+	struct state *ptr_st;
 	so_serial_t *xauth_serialno; // ptr to xauth serial number value
     struct timeval *xauth_tv0; // ptr to xauth operation time value
-    xauth_callback_t **xauth_callback; // ptr to ptr to xauth callback
+    xauth_callback_t *xauth_callback; // ptr to ptr to xauth callback
     bool *xauth_abort; // ptr to xauth abort status
     pid_t *child; // ptr to xauth pid? (really, we should change it to thread id)
 	void *ptr_pam_handle; // pointer to pam handle.
