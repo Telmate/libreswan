@@ -981,9 +981,10 @@ void delete_state(struct state *st)
 	 * ??? in what sense are we resuming st?
 	 */
 #ifdef XAUTH_HAVE_PAM
-	if (st->st_xauth != NULL) {
-		xauth_pam_abort(st, FALSE);
-	}
+	// @avi do we need this here? maybe we can use this to signal the thread to go byebye dogpark when session is over??
+	//if (st->st_xauth != NULL) {
+		//xauth_pam_abort(st, FALSE);
+	//}
 #endif
 
 	/* If DPD is enabled on this state object, clear any pending events */
@@ -1053,7 +1054,7 @@ void delete_state(struct state *st)
 		st->st_state == STATE_CHILDSA_DEL) {
 			delete_ipsec_sa(st);
 			//st->xauth->ptarg.pam_do_state = PAM_SESSION_END;
-
+            // pfree_xauth() // dont forget to release resources here.
 	}
 
 	if (c->newest_ipsec_sa == st->st_serialno)

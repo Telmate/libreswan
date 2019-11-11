@@ -68,6 +68,7 @@ struct pam_thread_arg {
   	enum pam_state_t pam_do_state; // pam state
    	enum pam_result_state_t pam_state; // pam last operation result
    	void *ptr_state; // connection object state.
+   	void **ptr_xauth;
 
 };
 

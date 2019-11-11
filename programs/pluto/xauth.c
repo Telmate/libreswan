@@ -267,9 +267,6 @@ void xauth_start_pam_thread(struct state *st,
 	    DBG_log("XAUTH: #%lu: main-process starting PAM-process for authenticating user '%s'",
 		    xauth->serialno, xauth->ptarg.name));
 
-	//xauth->child = pluto_fork(xauth_child, xauth_pam_child_cleanup, xauth);
-	//xauth->child = pluto_fork(xauth_child, xauth_pam_child_promote_state, xauth);
-
 	xauth->ptarg.ptr_st = (void *) st; // pass connection state object PTR so we could complete the transaction when PAM_AUTH is happy
 	xauth->ptarg.xauth_callback = callback;
     xauth->ptarg.pam_do_state = PAM_AUTH; // start with AUTH
@@ -290,7 +287,9 @@ void xauth_start_pam_thread(struct state *st,
 		return;
 	} else {
 
+	    xauth->ptarg->ptr_xauth = &xauth; // create a circular link to ourselves so we can release our resources when the session is completed.
       	st->st_xauth = xauth;
+
     	pstats_xauth_started++;
 
 	}

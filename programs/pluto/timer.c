@@ -872,7 +872,7 @@ static void timer_event_cb(evutil_socket_t fd UNUSED, const short event UNUSED, 
 		 * This immediately invokes the callback passing in
 		 * ST.
 		 */
-		xauth_pam_abort(st, TRUE);
+		//xauth_pam_abort(st, TRUE); // @avi disable because we now have full threading support. maybe do this as a method to clear pam threads.
 		/*
 		 * Removed this call, presumably it was needed because
 		 * the call back didn't fire until later?
