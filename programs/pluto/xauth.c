@@ -271,7 +271,10 @@ void xauth_start_pam_thread(struct state *st,
 	if (xauth->child < 0) {
 		libreswan_log("XAUTH: #%lu: creation of PAM-process for user '%s' failed",
 			      xauth->serialno, xauth->ptarg.name);
-		//pfree_xauth(xauth);
+		bool a = false;
+		if(a) {
+		  pfree_xauth(xauth);
+		}
 		return;
 	}
 
