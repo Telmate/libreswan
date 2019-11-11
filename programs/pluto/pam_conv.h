@@ -17,6 +17,8 @@
 
 #ifdef XAUTH_HAVE_PAM
 
+#include "xauth.h"
+
 enum pam_state_t {
     PAM_AUTH = 0,
     PAM_SESSION_START = 1,
@@ -46,10 +48,20 @@ struct pam_thread_arg {
 	so_serial_t st_serialno;
 	unsigned long c_instance_serial;
 	const char *atype;  /* string XAUTH or IKEv2 */
-	void *ptr_pam_handle;
-	pthread_mutex_t thread_run_m;
-    	enum pam_state_t pam_do_state;
-    	enum pam_result_state_t pam_state;
+
+	/* PAM threading args, Avi Saranga. avi@ */
+
+	so_serial_t *xauth_serialno; // ptr to xauth serial number value
+    struct timeval *xauth_tv0; // ptr to xauth operation time value
+    xauth_callback_t **xauth_callback; // ptr to ptr to xauth callback
+    bool *xauth_abort; // ptr to xauth abort status
+    pid_t *child; // ptr to xauth pid? (really, we should change it to thread id)
+	void *ptr_pam_handle; // pointer to pam handle.
+	pthread_mutex_t thread_run_m; // thread control mutex
+  	enum pam_state_t pam_do_state; // pam state
+   	enum pam_result_state_t pam_state; // pam last operation result
+   	void *ptr_state; // connection object state.
+
 };
 
 extern bool do_pam_authentication(struct pam_thread_arg *arg);

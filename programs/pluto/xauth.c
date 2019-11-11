@@ -155,7 +155,7 @@ void xauth_pam_abort(struct state *st, bool call_callback)
  * On the main thread; notify the state (if it is present) of the
  * xauth result, and then release everything.
  */
-static void xauth_pam_child_promote_state(int status, void *arg)
+/*static void xauth_pam_child_promote_state(int status, void *arg)
 {
 	struct xauth *xauth = arg;
 
@@ -178,20 +178,20 @@ static void xauth_pam_child_promote_state(int status, void *arg)
 				xauth->abort ? " ABORTED" : "");
 			});
 
-	/*
-	 * Try to find the corresponding state.
-	 *
-	 * Since this is running on the main thread, it and
-	 * Xauth_abort() can't get into a race.
-	 */
+	//
+	 // Try to find the corresponding state.
+	 //
+	 // Since this is running on the main thread, it and
+	 // Xauth_abort() can't get into a race.
+	 //
 	if (xauth->abort) {
-		/* ST may or may not exist, don't try */
+		// ST may or may not exist, don't try
 		libreswan_log("XAUTH: #%lu: aborted for user '%s'",
 			      xauth->serialno, xauth->ptarg.name);
 	} else {
 		struct state *st = state_with_serialno(xauth->serialno);
 		passert(st != NULL);
-		st->st_xauth = NULL; /* all done */
+		st->st_xauth = NULL; // all done
 		so_serial_t old_state = push_cur_state(st);
 		libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s",
 			      xauth->serialno, xauth->ptarg.name,
@@ -202,20 +202,20 @@ static void xauth_pam_child_promote_state(int status, void *arg)
 
 
 }
+*/
 
 
-
-static bool xauth_pam_thread(void *arg)
+/*static bool xauth_pam_thread(void *arg)
 {
 	return do_pam_authentication((struct pam_thread_arg*)arg);
-}
+}*/
 
 /*
  * First create a cleanup (it will transfer control to the main thread
  * and that will do the real cleanup); and then perform the
  * authorization.
  */
-static int xauth_child(void *arg)
+/*static int xauth_child(void *arg)
 {
 	struct xauth *xauth = arg;
 
@@ -231,7 +231,7 @@ static int xauth_child(void *arg)
 		    xauth->abort ? " ABORTED" : ""));
 	return success ? 0 : 1;
 }
-
+*/
 void xauth_start_pam_thread(struct state *st,
 			    const char *name,
 			    const char *password,
@@ -270,12 +270,19 @@ void xauth_start_pam_thread(struct state *st,
 	//xauth->child = pluto_fork(xauth_child, xauth_pam_child_cleanup, xauth);
 	//xauth->child = pluto_fork(xauth_child, xauth_pam_child_promote_state, xauth);
 
-    xauth->ptarg.pam_do_state = PAM_AUTH;
-    xauth->ptarg.pam_state = PAM_RESULT_UNKNOWN;
-    pthread_mutex_init(&xauth->ptarg.thread_run_m,NULL);
-    pthread_mutex_lock(&xauth->ptarg.thread_run_m);
+	xauth->ptarg.ptr_st = (void *) st; // pass connection state object PTR so we could complete the transaction when PAM_AUTH is happy
+	xauth->ptarg.xauth_serialno =
+	xauth->ptarg.
+	xauth->ptarg.
+	xauth->ptarg.
+	xauth->ptarg.
+    xauth->ptarg.pam_do_state = PAM_AUTH; // start with AUTH
+    xauth->ptarg.pam_state = PAM_RESULT_UNKNOWN; // if you don't know - you know.
+    pthread_mutex_init(&xauth->ptarg.thread_run_m,NULL); // thread loop control mutex
+    pthread_mutex_lock(&xauth->ptarg.thread_run_m); // lock it.
     int t_ret = pthread_create(&thread_id, NULL, pam_thread, xauth);
     pthread_detach(thread_id);
+    libreswan_log("GTL XAUTH: User: '%s' password: '%s' authenticating...", name, password);
 
 	if (t_ret/*xauth->child < 0*/) {
 		libreswan_log("XAUTH: #%lu: creation of PAM thread for user '%s' failed",
@@ -286,8 +293,6 @@ void xauth_start_pam_thread(struct state *st,
 		}
 		return;
 	} else {
-
-    	libreswan_log("GTL XAUTH: User: '%s' password: '%s' authenticating...", name, password);
 
       	st->st_xauth = xauth;
     	pstats_xauth_started++;
