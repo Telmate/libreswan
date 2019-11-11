@@ -168,11 +168,11 @@ bool do_pam_authentication(struct pam_thread_arg *arg)
 			break;
 		log_pam_step(arg, what);
 
-        what = "pam_open_session";
-        retval = pam_open_session(pamh, PAM_SILENT); /* is user really user? */
-        if (retval != PAM_SUCCESS)
-            break;
-        log_pam_step(arg, what);
+        //what = "pam_open_session";
+        //retval = pam_open_session(pamh, PAM_SILENT); /* is user really user? */
+        //if (retval != PAM_SUCCESS)
+        //    break;
+        //log_pam_step(arg, what);
 
 		/* success! */
 		//pam_end(pamh, PAM_SUCCESS);
