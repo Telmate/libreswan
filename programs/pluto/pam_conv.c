@@ -235,7 +235,7 @@ void *pam_thread(void *parg)
                       so_serial_t old_state = push_cur_state(st);
                       //struct msg_digest **mdp = NULL;
                       //ptr_xauth->callback(st, mdp ptr_xauth->ptarg.name, success);
-                      libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_authenticate",
+                      libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_acct_mgmt",
                                     ptr_xauth->ptarg.st_serialno, ptr_xauth->ptarg.name,
                                     success ? "SUCCESSS" : "FAILURE");
 
@@ -281,7 +281,7 @@ void *pam_thread(void *parg)
 
               //struct msg_digest **mdp = NULL;
               //ptr_xauth->callback(st, mdp ptr_xauth->ptarg.name, success);
-              libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_authenticate",
+              libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_set_item",
                             ptr_xauth->ptarg.st_serialno, ptr_xauth->ptarg.name,
                             success ? "SUCCESSS" : "FAILURE");
 
@@ -306,7 +306,7 @@ void *pam_thread(void *parg)
 
           //struct msg_digest **mdp = NULL;
           //ptr_xauth->callback(st, mdp ptr_xauth->ptarg.name, success);
-          libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_authenticate",
+          libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_start",
                         ptr_xauth->ptarg.st_serialno, ptr_xauth->ptarg.name,
                         success ? "SUCCESSS" : "FAILURE");
 
@@ -332,7 +332,7 @@ void *pam_thread(void *parg)
 
           //struct msg_digest **mdp = NULL;
           //ptr_xauth->callback(st, mdp ptr_xauth->ptarg.name, success);
-          libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_authenticate",
+          libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_open_session GOOD",
                         ptr_xauth->ptarg.st_serialno, ptr_xauth->ptarg.name,
                         success ? "SUCCESSS" : "FAILURE");
 
@@ -353,7 +353,7 @@ void *pam_thread(void *parg)
 
           //struct msg_digest **mdp = NULL;
           //ptr_xauth->callback(st, mdp ptr_xauth->ptarg.name, success);
-          libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_authenticate",
+          libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_open_session SAD",
                         ptr_xauth->ptarg.st_serialno, ptr_xauth->ptarg.name,
                         success ? "SUCCESSS" : "FAILURE");
 
@@ -389,7 +389,7 @@ void *pam_thread(void *parg)
 
           //struct msg_digest **mdp = NULL;
           //ptr_xauth->callback(st, mdp ptr_xauth->ptarg.name, success);
-          libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_authenticate",
+          libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_close_session",
                         ptr_xauth->ptarg.st_serialno, ptr_xauth->ptarg.name,
                         success ? "SUCCESSS" : "FAILURE");
 
@@ -408,7 +408,7 @@ void *pam_thread(void *parg)
         break;
       } else {  ptr_xauth->ptarg.pam_state = PAM_TERM_FAIL; }
     }
-libreswan_log("XAUTH: THREAD LOOP????");
+  //libreswan_log("XAUTH: THREAD LOOP????");
     usleep(100000); // 100ms because, because we are efficient pffft.
 
   } while(thread_operation(&ptr_xauth->ptarg.thread_run_m) == 0);
