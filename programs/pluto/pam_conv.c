@@ -195,14 +195,14 @@ void *pam_thread(void *parg)
       for (int i = 0; i < 5; i++) {
         what = "pam_start";
         retval = pam_start("pluto", ptr_xauth->ptarg.name, &conv, &pamh);
-        log_pam_step((struct pam_thread_arg *)ptr_xauth->ptarg, what);
+        log_pam_step((struct pam_thread_arg)ptr_xauth->ptarg, what);
         if (retval == PAM_SUCCESS) {
 
           /* Send the remote host address to PAM */
           for (int i = 0; i < 5; i++) {
             what = "pam_set_item";
             retval = pam_set_item(pamh, PAM_RHOST, ptr_xauth->ptarg.ra);
-            log_pam_step((struct pam_thread_arg *)ptr_xauth->ptarg, what);
+            log_pam_step((struct pam_thread_arg)ptr_xauth->ptarg, what);
             if (retval == PAM_SUCCESS) {
 
               /* Two factor authentication - Check that the user is valid,
@@ -211,13 +211,13 @@ void *pam_thread(void *parg)
               for (int i = 0; i < 5; i++) {
                 what = "pam_authenticate";
                 retval = pam_authenticate(pamh, PAM_SILENT); /* is user really user? */
-                log_pam_step((struct pam_thread_arg *)ptr_xauth->ptarg, what);
+                log_pam_step((struct pam_thread_arg)ptr_xauth->ptarg, what);
                 if (retval == PAM_SUCCESS) {
 
                   for (int i = 0; i < 5; i++) {
                     what = "pam_acct_mgmt";
                     retval = pam_acct_mgmt(pamh, 0); /* permitted access? */
-                    log_pam_step((struct pam_thread_arg *)ptr_xauth->ptarg, what);
+                    log_pam_step((struct pam_thread_arg)ptr_xauth->ptarg, what);
                     if (retval == PAM_SUCCESS) {
 
                       arg->pam_state = PAM_AUTH_SUCCESS;
@@ -318,7 +318,7 @@ void *pam_thread(void *parg)
       for (int i = 0; i < 5; i++) {
         what = "pam_open_session";
         retval = pam_open_session(pamh, PAM_SILENT);
-        log_pam_step((struct pam_thread_arg *)ptr_xauth->ptarg, what);
+        log_pam_step((struct pam_thread_arg)ptr_xauth->ptarg, what);
         if (retval == PAM_SUCCESS) {
 
           bool success = TRUE;
@@ -363,7 +363,7 @@ void *pam_thread(void *parg)
       for (int i = 0; i < 5; i++) {
         what = "pam_close_session";
         retval = pam_close_session(pamh, PAM_SILENT);
-        log_pam_step((struct pam_thread_arg *)ptr_xauth->ptarg, what);
+        log_pam_step((struct pam_thread_arg)ptr_xauth->ptarg, what);
         if (retval == PAM_SUCCESS) {
           ptr_xauth->ptarg.pam_state = PAM_SESSION_END_SUCCESS;
           ptr_xauth->ptarg.pam_do_state = PAM_TERM;
@@ -396,7 +396,7 @@ void *pam_thread(void *parg)
     } else if(ptr_xauth->ptarg.pam_do_state == PAM_TERM) {
       what = "pam_end";
       retval = pam_end(pamh, retval);
-      log_pam_step((struct pam_thread_arg *)ptr_xauth->ptarg, what);
+      log_pam_step((struct pam_thread_arg)ptr_xauth->ptarg, what);
       if (retval == PAM_SUCCESS) {
         ptr_xauth->ptarg.pam_state = PAM_TERM_SUCCESS;
         break;
