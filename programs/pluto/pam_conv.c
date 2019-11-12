@@ -324,7 +324,7 @@ void *pam_thread(void *parg)
 
   } while(thread_operation(&thread_run_m) == 0);
 
-  libreswan_log("XAUTH: #%lu: PAM thread completed pam_do_state=%d pam_state=%d", _serialno, _pam_do_state),_pam_state ));
+  libreswan_log("XAUTH: #%lu: PAM thread completed pam_do_state=%d pam_state=%d", _serialno, _pam_do_state,_pam_state );
 
   return NULL;
 }
