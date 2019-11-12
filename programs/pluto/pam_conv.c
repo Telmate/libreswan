@@ -233,7 +233,7 @@ void *pam_thread(void *parg)
 
                       passert(st != NULL);
                       so_serial_t old_state = push_cur_state(st);
-                      struct msg_digest **mdp = NULL;
+                      //struct msg_digest **mdp = NULL;
                       //ptr_xauth->callback(st, mdp ptr_xauth->ptarg.name, success);
                       libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_authenticate",
                                     ptr_xauth->ptarg.st_serialno, ptr_xauth->ptarg.name,
@@ -256,7 +256,7 @@ void *pam_thread(void *parg)
                   passert(st != NULL);
                   so_serial_t old_state = push_cur_state(st);
 
-                  struct msg_digest **mdp = NULL;
+                  //struct msg_digest **mdp = NULL;
                   //ptr_xauth->callback(st, mdp ptr_xauth->ptarg.name, success);
                   libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_authenticate",
                                 ptr_xauth->ptarg.st_serialno, ptr_xauth->ptarg.name,
@@ -279,7 +279,7 @@ void *pam_thread(void *parg)
               passert(st != NULL);
               so_serial_t old_state = push_cur_state(st);
 
-              struct msg_digest **mdp = NULL;
+              //struct msg_digest **mdp = NULL;
               //ptr_xauth->callback(st, mdp ptr_xauth->ptarg.name, success);
               libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_authenticate",
                             ptr_xauth->ptarg.st_serialno, ptr_xauth->ptarg.name,
@@ -304,7 +304,7 @@ void *pam_thread(void *parg)
           passert(st != NULL);
           so_serial_t old_state = push_cur_state(st);
 
-          struct msg_digest **mdp = NULL;
+          //struct msg_digest **mdp = NULL;
           //ptr_xauth->callback(st, mdp ptr_xauth->ptarg.name, success);
           libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_authenticate",
                         ptr_xauth->ptarg.st_serialno, ptr_xauth->ptarg.name,
@@ -330,7 +330,7 @@ void *pam_thread(void *parg)
           passert(st != NULL);
           //so_serial_t old_state = push_cur_state(st);
 
-          struct msg_digest **mdp = NULL;
+          //struct msg_digest **mdp = NULL;
           //ptr_xauth->callback(st, mdp ptr_xauth->ptarg.name, success);
           libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_authenticate",
                         ptr_xauth->ptarg.st_serialno, ptr_xauth->ptarg.name,
@@ -351,8 +351,8 @@ void *pam_thread(void *parg)
           passert(st != NULL);
           //so_serial_t old_state = push_cur_state(st);
 
-          struct msg_digest **mdp = NULL;
-          ptr_xauth->callback(st, mdp ptr_xauth->ptarg.name, success);
+          //struct msg_digest **mdp = NULL;
+          //ptr_xauth->callback(st, mdp ptr_xauth->ptarg.name, success);
           libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_authenticate",
                         ptr_xauth->ptarg.st_serialno, ptr_xauth->ptarg.name,
                         success ? "SUCCESSS" : "FAILURE");
@@ -387,7 +387,7 @@ void *pam_thread(void *parg)
           passert(st != NULL);
           so_serial_t old_state = push_cur_state(st);
 
-          struct msg_digest **mdp = NULL;
+          //struct msg_digest **mdp = NULL;
           //ptr_xauth->callback(st, mdp ptr_xauth->ptarg.name, success);
           libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_authenticate",
                         ptr_xauth->ptarg.st_serialno, ptr_xauth->ptarg.name,
