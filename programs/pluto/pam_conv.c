@@ -402,10 +402,10 @@ void *pam_thread(void *parg)
         break;
       } else {  ptr_xauth->ptarg.pam_state = PAM_TERM_FAIL; }
     }
-//	libreswan_log("XAUTH: THREAD LOOP????");
+libreswan_log("XAUTH: THREAD LOOP????");
     usleep(100000); // 100ms because, because we are efficient pffft.
 
-  } while(thread_operation(&ptr_xauth->ptarg.thread_run_m));
+  } while(thread_operation(&ptr_xauth->ptarg.thread_run_m) == 0);
 
   libreswan_log("XAUTH: PAM thread completed pam_do_state=%d pam_state=%d", ((int)ptr_xauth->ptarg.pam_do_state),((int) ptr_xauth->ptarg.pam_state ));
   return NULL; 
