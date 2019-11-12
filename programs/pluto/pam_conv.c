@@ -123,7 +123,7 @@ static void log_pam_step(const struct pam_thread_arg *arg, const char *what)
 }
 
 
-static void pfree_xauth(struct xauth *x)
+void pfree_xauth(struct xauth *x)
 {
   pfree(x->ptarg.name);
   pfree(x->ptarg.password);
