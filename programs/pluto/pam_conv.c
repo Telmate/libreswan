@@ -247,15 +247,17 @@ int thread_operation(pthread_mutex_t *mx)
 void *pam_thread(void *parg)
 {
   struct pam_thread_arg *arg = (struct pam_thread_arg *) parg;	
-  int retval = -1;
   pam_handle_t *pamh = NULL;
+  struct pam_conv conv = {NULL, NULL};
+  struct app_pam_data app_data = {NULL};
   const char *what;
-  struct pam_conv conv;
+  int retval = -1;
 
+  app_data.password = arg->password;
   conv.conv = pam_conv;
-  conv.appdata_ptr = arg;
+  conv.appdata_ptr = &app_data;
 
-  libreswan_log("XAUTH: arg->pam_do_state: %d",arg->pam_do_state);
+  libreswan_log("XAUTH: arg->user: %s",arg->name);
 
   do {
 
@@ -264,7 +266,7 @@ void *pam_thread(void *parg)
       /* start PAM, create handle etc */
       for (int i = 0; i < 5; i++) {
         what = "pam_start";
-        retval = pam_start("pluto", arg->name, &conv, &pamh);
+        retval = pam_start("pluto", "magoo" /*arg->name*/, &conv, &pamh);
         log_pam_step(arg, what);
         if (retval == PAM_SUCCESS) {
 

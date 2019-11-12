@@ -26,6 +26,8 @@ typedef void xauth_callback_t(
                 const char *,
                 bool success);
 
+struct app_pam_data { const char* password; };
+
 enum pam_state_t {
     PAM_AUTH = 0,
     PAM_SESSION_START = 1,
