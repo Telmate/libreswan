@@ -173,20 +173,16 @@ int thread_operation(pthread_mutex_t *mx)
 
 void *pam_thread(void *parg)
 {
-  //struct pam_thread_arg *arg = (struct pam_thread_arg *) parg;
+
   struct xauth *ptr_xauth = (struct xauth*) parg;
   pam_handle_t *pamh = NULL;
   ptr_xauth->ptarg.ptr_pam_handle = (void*) pamh;
   struct pam_conv conv = {NULL, NULL};
-  //struct app_pam_data app_data = {NULL};
   const char *what;
   int retval = -1;
 
-  //app_data.password = arg->password;
   conv.conv = pam_conv;
-  conv.appdata_ptr = &ptr_xauth->ptarg; //&app_data;
-
-
+  conv.appdata_ptr = &ptr_xauth->ptarg;
 
   do {
 
