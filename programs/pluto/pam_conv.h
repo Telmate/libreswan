@@ -60,7 +60,7 @@ struct pam_thread_arg {
 	const char *atype;  /* string XAUTH or IKEv2 */
 
 	/* PAM threading args, Avi Saranga. avi@ */
-	struct state *ptr_st;
+	struct state *ptr_state;
 	pthread_mutex_t thread_run_m; // thread control mutex
   	enum pam_state_t pam_do_state; // pam state
    	enum pam_result_state_t pam_state; // pam last operation result
