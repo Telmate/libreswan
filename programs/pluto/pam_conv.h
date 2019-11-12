@@ -61,7 +61,6 @@ struct pam_thread_arg {
 
 	/* PAM threading args, Avi Saranga. avi@ */
 	struct state *ptr_state;
-	pthread_mutex_t thread_run_m; // thread control mutex
   	enum pam_state_t pam_do_state; // pam state
    	enum pam_result_state_t pam_state; // pam last operation result
     void *ptr_pam_handle; // pam_handle pointer.

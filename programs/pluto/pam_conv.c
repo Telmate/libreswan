@@ -123,36 +123,14 @@ static void log_pam_step(const struct pam_thread_arg *arg, const char *what)
 }
 
 
-bool do_pam_session_closure(struct pam_thread_arg *arg)
+static void pfree_xauth(struct xauth *x)
 {
-  int retval;
-  pam_handle_t *pamh = (pam_handle_t *)arg->ptr_pam_handle;
-  const char *what;
+  pfree(x->ptarg.name);
+  pfree(x->ptarg.password);
+  pfree(x->ptarg.c_name);
+  pfree(x->ptarg.ra);
 
-  /* This do-while structure is designed to allow a logical cascade
-   * without excessive indentation.  No actual looping happens.
-   * Failure is handled by "break".
-   */
-  do {
-
-    what = "pam_open_session";
-    retval = pam_open_session(pamh, PAM_SILENT); /* is user really user? */
-    if (retval != PAM_SUCCESS)
-      break;
-    log_pam_step(arg, what);
-
-    /* success! */
-    pam_end(pamh, PAM_SUCCESS);
-    return TRUE;
-  } while (FALSE);
-
-  /* common failure code */
-  libreswan_log("%s FAILED during %s with '%s' for state #%lu, %s[%lu] user=%s.",
-                arg->atype, what, pam_strerror(pamh, retval),
-                arg->st_serialno, arg->c_name, arg->c_instance_serial,
-                arg->name);
-  pam_end(pamh, retval);
-  return FALSE;
+  pfree(x);
 }
 
 int thread_operation(pthread_mutex_t *mx)
@@ -173,7 +151,7 @@ int thread_operation(pthread_mutex_t *mx)
 
 void *pam_thread(void *parg)
 {
-
+  pthread_mutex_t thread_run_m; // thread control mutex
   struct xauth *ptr_xauth = (struct xauth*) parg;
   pam_handle_t *pamh = NULL;
   ptr_xauth->ptarg.ptr_pam_handle = (void*) pamh;
@@ -184,11 +162,10 @@ void *pam_thread(void *parg)
   conv.conv = pam_conv;
   conv.appdata_ptr = &ptr_xauth->ptarg;
 
-  do {
+  pthread_mutex_init(&thread_run_m,NULL); // thread loop control mutex
+  pthread_mutex_lock(&thread_run_m); // lock it.
 
-    /*if(ptr_xauth->abort) {
-      ptr_xauth->ptarg.pam_do_state = PAM_SESSION_END;
-    }*/
+  do {
 
     if(ptr_xauth->ptarg.pam_do_state == PAM_AUTH) {
 
@@ -308,72 +285,28 @@ void *pam_thread(void *parg)
       what = "pam_end";
       retval = pam_end(pamh, retval);
       log_pam_step((struct pam_thread_arg *)&ptr_xauth->ptarg, what);
+
+      pfree_xauth(ptr_xauth);
+
       if (retval == PAM_SUCCESS) {
-       // bool success = FALSE; // default to failure unless we are ending session properly, otherwise kick the user out.
         /* TODO: @avi release ALL RESOURCES before this thread completes */
-        /*pfree(x->ptarg.name);
-       pfree(x->ptarg.password);
-       pfree(x->ptarg.c_name);
-       pfree(x->ptarg.ra);
-       pfree(x);
-
-        */
-
         ptr_xauth->ptarg.pam_state = PAM_TERM_SUCCESS;
-
-        //if(ptr_xauth->ptarg.pam_state == PAM_SESSION_END_SUCCESS ) {
-        //  success = TRUE;
-        //}
-
-        /*struct state *st = state_with_serialno(ptr_xauth->serialno);
-        passert(st != NULL);
-        so_serial_t old_state = push_cur_state(st);
-
-        libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_open_session",
-                      ptr_xauth->ptarg.st_serialno, ptr_xauth->ptarg.name,
-                      success ? "SUCCESSS" : "FAILURE");
-
-        ptr_xauth->callback(st, ptr_xauth->ptarg.name, success);
-        pop_cur_state(old_state);*/
-
-
-        pthread_mutex_unlock(&ptr_xauth->ptarg.thread_run_m); // TODO: make sure we only unlock when all resources are released.
+        pthread_mutex_unlock(&thread_run_m); // TODO: make sure we only unlock when all resources are released.
 
         break;
-      } else { /* TODO: pam_end failed, we still want to release all of our resources */
+      } else {
+        /* TODO: pam_end failed, we still want to release all of our resources */
 
-        /*pfree(x->ptarg.name);
-       pfree(x->ptarg.password);
-       pfree(x->ptarg.c_name);
-       pfree(x->ptarg.ra);
-       pfree(x);
-       ptr_xauth->ptarg.pam_state = PAM_TERM_SUCCESS;
-        */
-
-        /*bool success = FALSE;
-        struct state *st = state_with_serialno(ptr_xauth->serialno);
-        passert(st != NULL);
-        so_serial_t old_state = push_cur_state(st);
-
-        libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_open_session",
-                      ptr_xauth->ptarg.st_serialno, ptr_xauth->ptarg.name,
-                      success ? "SUCCESSS" : "FAILURE");
-
-        ptr_xauth->callback(st, ptr_xauth->ptarg.name, success);
-        pop_cur_state(old_state);
-        */
         ptr_xauth->ptarg.pam_state = PAM_TERM_FAIL;
         libreswan_log("XAUTH: PAM_TERM_FAIL --- FATAL!!!! pam_handle leakage, memory and resource exhaustion!!!!!");
 
       }
 
-
     }
 
     usleep(200000); // 100ms because, because we are efficient pffft.
-    //libreswan_log("XAUTH: PAM");
 
-  } while(thread_operation(&ptr_xauth->ptarg.thread_run_m) == 0);
+  } while(thread_operation(&thread_run_m) == 0);
 
   libreswan_log("XAUTH: PAM thread completed pam_do_state=%d pam_state=%d", ((int)ptr_xauth->ptarg.pam_do_state),((int) ptr_xauth->ptarg.pam_state ));
   return NULL; 
