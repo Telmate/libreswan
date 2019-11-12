@@ -317,8 +317,10 @@ void *pam_thread(void *parg)
        pfree(x->ptarg.c_name);
        pfree(x->ptarg.ra);
        pfree(x);
-       ptr_xauth->ptarg.pam_state = PAM_TERM_SUCCESS;
+
         */
+
+        ptr_xauth->ptarg.pam_state = PAM_TERM_SUCCESS;
 
         if(ptr_xauth->ptarg.pam_state == PAM_SESSION_END_SUCCESS ) {
           success = TRUE;
