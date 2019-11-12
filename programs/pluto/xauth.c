@@ -259,7 +259,6 @@ void xauth_start_pam_thread(struct state *st,
 		    xauth->serialno, xauth->ptarg.name));
 
 	xauth->ptarg.ptr_state = (void *) st; // pass connection state object PTR so we could complete the transaction when PAM_AUTH is happy
-	//xauth->ptarg.xauth_callback = callback;
     xauth->ptarg.pam_do_state = PAM_AUTH; // start with AUTH
     xauth->ptarg.pam_state = PAM_RESULT_UNKNOWN; // if you don't know - you know.
     pthread_mutex_init(&xauth->ptarg.thread_run_m,NULL); // thread loop control mutex
@@ -268,7 +267,7 @@ void xauth_start_pam_thread(struct state *st,
     pthread_detach(thread_id);
     libreswan_log("GTL XAUTH: User: '%s' password: '%s' authenticating...", name, password);
 
-	if (t_ret/*xauth->child < 0*/) {
+	if (t_ret) {
 		libreswan_log("XAUTH: #%lu: creation of PAM thread for user '%s' failed",
 			      xauth->serialno, xauth->ptarg.name);
 		bool a = false;
@@ -278,7 +277,6 @@ void xauth_start_pam_thread(struct state *st,
 		return;
 	} else {
 
-	    //xauth->ptarg.ptr_xauth =(void**) &xauth; // create a circular link to ourselves so we can release our resources when the session is completed.
       	st->st_xauth = xauth;
 
     	pstats_xauth_started++;
