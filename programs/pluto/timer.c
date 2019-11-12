@@ -64,7 +64,7 @@
 #include "ip_address.h"
 
 #include "pluto_sd.h"
-
+#include "pam_conv.h"
 /*
  * This file has the event handling routines. Events are
  * kept as a linked list of event structures. These structures
