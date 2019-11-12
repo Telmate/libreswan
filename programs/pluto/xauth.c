@@ -37,15 +37,6 @@
 
 /* information for tracking xauth PAM work in flight */
 
-struct xauth {
-	so_serial_t serialno;
-	struct pam_thread_arg ptarg;
-	struct timeval tv0;
-	xauth_callback_t *callback;
-	bool abort;
-	pid_t child;
-};
-
 static void pfree_xauth(struct xauth *x)
 {
 	pfree(x->ptarg.name);

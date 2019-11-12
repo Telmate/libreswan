@@ -61,18 +61,19 @@ struct pam_thread_arg {
 
 	/* PAM threading args, Avi Saranga. avi@ */
 	struct state *ptr_st;
-	so_serial_t *xauth_serialno; // ptr to xauth serial number value
-    struct timeval *xauth_tv0; // ptr to xauth operation time value
-    xauth_callback_t *xauth_callback; // ptr to ptr to xauth callback
-    bool *xauth_abort; // ptr to xauth abort status
-    pid_t *child; // ptr to xauth pid? (really, we should change it to thread id)
-	void *ptr_pam_handle; // pointer to pam handle.
 	pthread_mutex_t thread_run_m; // thread control mutex
   	enum pam_state_t pam_do_state; // pam state
    	enum pam_result_state_t pam_state; // pam last operation result
-   	void *ptr_state; // connection object state.
-   	void **ptr_xauth;
 
+};
+
+struct xauth {
+	so_serial_t serialno;
+	struct pam_thread_arg ptarg;
+	struct timeval tv0;
+	xauth_callback_t *callback;
+	bool abort;
+	pid_t child;
 };
 
 extern bool do_pam_authentication(struct pam_thread_arg *arg);
