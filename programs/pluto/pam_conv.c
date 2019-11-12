@@ -202,7 +202,7 @@ void *pam_thread(void *parg)
           /* Send the remote host address to PAM */
           for (int i = 0; i < 5; i++) {
             what = "pam_set_item";
-            retval = pam_set_item(pamh, PAM_RHOST, ptr_xauth->ptargra);
+            retval = pam_set_item(pamh, PAM_RHOST, ptr_xauth->ptarg.ra);
             log_pam_step(arg, what);
             if (retval == PAM_SUCCESS) {
 
