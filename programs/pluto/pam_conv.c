@@ -196,20 +196,21 @@ void *pam_thread(void *parg)
 
         what = "pam_start";
         retval = pam_start("pluto", ptr_xauth->ptarg.name, &conv, &pamh);
-        log_pam_step((struct pam_thread_arg *)&ptr_xauth->ptarg, what);
+        log_pam_step((struct pam_thread_arg *) &ptr_xauth->ptarg, what);
+
         if (retval == PAM_SUCCESS) {
           /* do pam_set_item */
           for (int i = 0; i < 5; i++) {
 
             what = "pam_set_item";
             retval = pam_set_item(pamh, PAM_RHOST, ptr_xauth->ptarg.ra);
-            log_pam_step((struct pam_thread_arg *)&ptr_xauth->ptarg, what);
+            log_pam_step((struct pam_thread_arg *) &ptr_xauth->ptarg, what);
             if (retval == PAM_SUCCESS) {
               /* do pam_authenticate */
 
               what = "pam_authenticate";
               retval = pam_authenticate(pamh, PAM_SILENT); /* is user really user? */
-              log_pam_step((struct pam_thread_arg *)&ptr_xauth->ptarg, what);
+              log_pam_step((struct pam_thread_arg *) &ptr_xauth->ptarg, what);
               if (retval == PAM_SUCCESS) {
                 /* do pam_acct_mgmt */
                 for (int i = 0; i < 5; i++) {
@@ -221,26 +222,29 @@ void *pam_thread(void *parg)
                     /* do promotion to session start */
                     ptr_xauth->ptarg.pam_state = PAM_AUTH_SUCCESS;
                     ptr_xauth->ptarg.pam_do_state = PAM_SESSION_START;
-                    break;
+                    break; //  break out of pam_acct_mgmt loop
 
                   } else { /* failed pam_acct_mgmt */
                     ptr_xauth->ptarg.pam_state = PAM_AUTH_FAIL;
                     ptr_xauth->ptarg.pam_do_state = PAM_TERM;
+
                   }
                 }
+                break; // break out of pam_authenticate loop
 
               } else { /* failed pam_authenticate */
                 ptr_xauth->ptarg.pam_state = PAM_AUTH_FAIL;
                 ptr_xauth->ptarg.pam_do_state = PAM_TERM;
               }
 
-
             } else { /* failed pam_set_item */
               ptr_xauth->ptarg.pam_state = PAM_AUTH_FAIL;
               ptr_xauth->ptarg.pam_do_state = PAM_TERM;
             }
 
+
           }
+          break; // pam_start
 
         } else { /* failed pam_start */
           ptr_xauth->ptarg.pam_state = PAM_AUTH_FAIL;
