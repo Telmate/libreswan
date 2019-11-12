@@ -263,7 +263,6 @@ void *pam_thread(void *parg)
 
           bool success = TRUE;
           struct state *st = state_with_serialno(ptr_xauth->serialno);
-          st->hidden_variables.st_xauth_client_done = TRUE;
           passert(st != NULL);
           so_serial_t old_state = push_cur_state(st);
 
@@ -310,7 +309,7 @@ void *pam_thread(void *parg)
       retval = pam_end(pamh, retval);
       log_pam_step((struct pam_thread_arg *)&ptr_xauth->ptarg, what);
       if (retval == PAM_SUCCESS) {
-        bool success = FALSE; // default to failure unless we are ending session properly, otherwise kick the user out.
+       // bool success = FALSE; // default to failure unless we are ending session properly, otherwise kick the user out.
         /* TODO: @avi release ALL RESOURCES before this thread completes */
         /*pfree(x->ptarg.name);
        pfree(x->ptarg.password);
@@ -322,11 +321,11 @@ void *pam_thread(void *parg)
 
         ptr_xauth->ptarg.pam_state = PAM_TERM_SUCCESS;
 
-        if(ptr_xauth->ptarg.pam_state == PAM_SESSION_END_SUCCESS ) {
-          success = TRUE;
-        }
+        //if(ptr_xauth->ptarg.pam_state == PAM_SESSION_END_SUCCESS ) {
+        //  success = TRUE;
+        //}
 
-        struct state *st = state_with_serialno(ptr_xauth->serialno);
+        /*struct state *st = state_with_serialno(ptr_xauth->serialno);
         passert(st != NULL);
         so_serial_t old_state = push_cur_state(st);
 
@@ -335,7 +334,7 @@ void *pam_thread(void *parg)
                       success ? "SUCCESSS" : "FAILURE");
 
         ptr_xauth->callback(st, ptr_xauth->ptarg.name, success);
-        pop_cur_state(old_state);
+        pop_cur_state(old_state);*/
 
 
         pthread_mutex_unlock(&ptr_xauth->ptarg.thread_run_m); // TODO: make sure we only unlock when all resources are released.
@@ -351,7 +350,7 @@ void *pam_thread(void *parg)
        ptr_xauth->ptarg.pam_state = PAM_TERM_SUCCESS;
         */
 
-        bool success = FALSE;
+        /*bool success = FALSE;
         struct state *st = state_with_serialno(ptr_xauth->serialno);
         passert(st != NULL);
         so_serial_t old_state = push_cur_state(st);
@@ -362,7 +361,7 @@ void *pam_thread(void *parg)
 
         ptr_xauth->callback(st, ptr_xauth->ptarg.name, success);
         pop_cur_state(old_state);
-
+        */
         ptr_xauth->ptarg.pam_state = PAM_TERM_FAIL;
         libreswan_log("XAUTH: PAM_TERM_FAIL --- FATAL!!!! pam_handle leakage, memory and resource exhaustion!!!!!");
 
