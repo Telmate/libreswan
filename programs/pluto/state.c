@@ -985,7 +985,7 @@ void delete_state(struct state *st)
 	if (st->st_xauth != NULL) {
 		//xauth_pam_abort(st, FALSE);
 		libreswan_log("XAUTH: inviting XAUTH thread destruction.");
-		xauth_terminate = TRUE;
+		st->st_xauth->abort = TRUE;
 		//libreswan_log("XAUTH: inviting XAUTH thread destruction. %d", st->st_xauth->ptarg.pam_do_state);
 		//st->st_xauth->ptarg.pam_do_state = PAM_SESSION_END;
 	}

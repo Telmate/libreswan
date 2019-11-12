@@ -186,7 +186,7 @@ void *pam_thread(void *parg)
 
   do {
 
-    if(xauth_terminate == TRUE) {
+    if(ptr_xauth->abort == TRUE) {
       ptr_xauth->ptarg.pam_do_state = PAM_SESSION_END;
     }
 
