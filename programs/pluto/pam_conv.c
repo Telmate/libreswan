@@ -220,8 +220,8 @@ void *pam_thread(void *parg)
                     log_pam_step((struct pam_thread_arg *)&ptr_xauth->ptarg, what);
                     if (retval == PAM_SUCCESS) {
 
-                      arg->pam_state = PAM_AUTH_SUCCESS;
-                      arg->pam_do_state = PAM_SESSION_START;
+                      ptr_xauth->ptarg.pam_state = PAM_AUTH_SUCCESS;
+                      ptr_xauth->ptarg.pam_do_state = PAM_SESSION_START;
                       break;
 
                     } else { // pam_acct_mgmt
