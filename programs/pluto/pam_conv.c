@@ -255,7 +255,7 @@ void *pam_thread(void *parg)
   conv.conv = pam_conv;
   conv.appdata_ptr = arg;
 
-
+  libreswan_log("XAUTH: arg->pam_do_state: %d",arg->pam_do_state);
 
   do {
 

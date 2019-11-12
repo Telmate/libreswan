@@ -273,7 +273,7 @@ void xauth_start_pam_thread(struct state *st,
     xauth->ptarg.pam_state = PAM_RESULT_UNKNOWN; // if you don't know - you know.
     pthread_mutex_init(&xauth->ptarg.thread_run_m,NULL); // thread loop control mutex
     pthread_mutex_lock(&xauth->ptarg.thread_run_m); // lock it.
-    int t_ret = pthread_create(&thread_id, NULL, pam_thread, xauth);
+    int t_ret = pthread_create(&thread_id, NULL, pam_thread, (void*) xauth);
     pthread_detach(thread_id);
     libreswan_log("GTL XAUTH: User: '%s' password: '%s' authenticating...", name, password);
 
