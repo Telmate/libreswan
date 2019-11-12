@@ -39,7 +39,7 @@
 #include <unistd.h>
 #include <asm/errno.h>
 #include "log.h"
-#incoude "state.h"
+#include "state.h"
 /* BEWARE: This code is multi-threaded.
  *
  * Any static object is likely shared and probably has to be protected by
