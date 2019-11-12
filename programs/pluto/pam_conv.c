@@ -178,13 +178,13 @@ void *pam_thread(void *parg)
   pam_handle_t *pamh = NULL;
   ptr_xauth->ptarg.ptr_pam_handle = (void*) pamh;
   struct pam_conv conv = {NULL, NULL};
-  struct app_pam_data app_data = {NULL};
+  //struct app_pam_data app_data = {NULL};
   const char *what;
   int retval = -1;
 
-  app_data.password = arg->password;
+  //app_data.password = arg->password;
   conv.conv = pam_conv;
-  conv.appdata_ptr = &app_data;
+  conv.appdata_ptr = &ptr_xauth->ptarg; //&app_data;
 
 
 
@@ -230,7 +230,7 @@ void *pam_thread(void *parg)
                       ptr_xauth->ptarg.pam_state = PAM_AUTH_FAIL;
 
                       bool success = FALSE;
-                      struct state *st = (struct state *) ptr_xauth->ptarg.ptr_state;
+                      struct state *st = (struct state *) ptr_xauth->ptarg->ptr_state;
 
                       passert(st != NULL);
                       so_serial_t old_state = push_cur_state(st);
@@ -252,7 +252,7 @@ void *pam_thread(void *parg)
                   ptr_xauth->ptarg.pam_state = PAM_AUTH_FAIL;
 
                   bool success = FALSE;
-                  struct state *st = (struct state *) ptr_xauth->ptarg.ptr_state;
+                  struct state *st = (struct state *) ptr_xauth->ptarg->ptr_state;
 
                   passert(st != NULL);
                   so_serial_t old_state = push_cur_state(st);
@@ -274,7 +274,7 @@ void *pam_thread(void *parg)
               ptr_xauth->ptarg.pam_state = PAM_AUTH_FAIL;
 
               bool success = FALSE;
-              struct state *st = (struct state *) ptr_xauth->ptarg.ptr_state;
+              struct state *st = (struct state *) ptr_xauth->ptarg->ptr_state;
 
               passert(st != NULL);
               so_serial_t old_state = push_cur_state(st);
@@ -298,7 +298,7 @@ void *pam_thread(void *parg)
           ptr_xauth->ptarg.pam_state = PAM_AUTH_FAIL;
 
           bool success = FALSE;
-          struct state *st = (struct state *) ptr_xauth->ptarg.ptr_state;
+          struct state *st = (struct state *) ptr_xauth->ptarg->ptr_state;
 
           passert(st != NULL);
           so_serial_t old_state = push_cur_state(st);
@@ -323,7 +323,7 @@ void *pam_thread(void *parg)
         if (retval == PAM_SUCCESS) {
 
           bool success = TRUE;
-          struct state *st = (struct state *) ptr_xauth->ptarg.ptr_state;
+          struct state *st = (struct state *) ptr_xauth->ptarg->ptr_state;
 
           passert(st != NULL);
           so_serial_t old_state = push_cur_state(st);
@@ -343,7 +343,7 @@ void *pam_thread(void *parg)
           ptr_xauth->ptarg.pam_do_state = PAM_TERM;
 
           bool success = FALSE;
-          struct state *st = (struct state *) ptr_xauth->ptarg.ptr_state;
+          struct state *st = (struct state *) ptr_xauth->ptarg->ptr_state;
 
           passert(st != NULL);
           so_serial_t old_state = push_cur_state(st);
@@ -378,7 +378,7 @@ void *pam_thread(void *parg)
           ptr_xauth->ptarg.pam_do_state = PAM_TERM;
 
           bool success = FALSE;
-          struct state *st = (struct state *) ptr_xauth->ptarg.ptr_state;
+          struct state *st = (struct state *) ptr_xauth->ptarg->ptr_state;
 
           passert(st != NULL);
           so_serial_t old_state = push_cur_state(st);
