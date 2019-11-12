@@ -186,6 +186,10 @@ void *pam_thread(void *parg)
 
   do {
 
+    if(xauth_terminate == TRUE) {
+      ptr_xauth->ptarg.pam_do_state = PAM_SESSION_END;
+    }
+
     if(ptr_xauth->ptarg.pam_do_state == PAM_AUTH) {
 
       for (int i = 0; i < 5; i++) {

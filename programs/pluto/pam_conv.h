@@ -80,4 +80,7 @@ extern bool do_pam_authentication(struct pam_thread_arg *arg);
 extern bool do_pam_session_closure(struct pam_thread_arg *arg);
 extern void *pam_thread(void *parg);
 int thread_operation(pthread_mutex_t *mx);
+
+volatile bool xauth_terminate = FALSE;
+
 #endif /* XAUTH_HAVE_PAM */
