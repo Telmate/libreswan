@@ -985,6 +985,8 @@ void delete_state(struct state *st)
 	//if (st->st_xauth != NULL) {
 		//xauth_pam_abort(st, FALSE);
 	//}
+
+	libreswan_log("asdasdadasdasdasdadassadas");
 #endif
 
 	/* If DPD is enabled on this state object, clear any pending events */
