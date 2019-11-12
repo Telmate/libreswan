@@ -33,7 +33,8 @@ enum pam_state_t {
     PAM_SESSION_START = 1,
     PAM_SESSION_END = 2,
     PAM_TERM = 3,
-    PAM_STATE_UNKNOWN = 4
+    PAM_STATE_UNKNOWN = 4,
+    PAM_DO_NOTHING = 5
 
 };
 
