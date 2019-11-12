@@ -176,6 +176,7 @@ void *pam_thread(void *parg)
   //struct pam_thread_arg *arg = (struct pam_thread_arg *) parg;
   struct xauth *ptr_xauth = (struct xauth*) parg;
   pam_handle_t *pamh = NULL;
+  ptr_xauth->ptarg.ptr_pam_handle = (void*) pamh;
   struct pam_conv conv = {NULL, NULL};
   struct app_pam_data app_data = {NULL};
   const char *what;
@@ -190,18 +191,18 @@ void *pam_thread(void *parg)
   do {
 
 
-    if(arg->pam_do_state == PAM_AUTH) {
+    if(ptr_xauth->ptarg.pam_do_state == PAM_AUTH) {
       /* start PAM, create handle etc */
       for (int i = 0; i < 5; i++) {
         what = "pam_start";
-        retval = pam_start("pluto", ptr_xauth->pt_arg.name, &conv, &pamh);
+        retval = pam_start("pluto", ptr_xauth->ptarg.name, &conv, &pamh);
         log_pam_step(arg, what);
         if (retval == PAM_SUCCESS) {
 
           /* Send the remote host address to PAM */
           for (int i = 0; i < 5; i++) {
             what = "pam_set_item";
-            retval = pam_set_item(pamh, PAM_RHOST, ptr_xauth->pt_argra);
+            retval = pam_set_item(pamh, PAM_RHOST, ptr_xauth->ptargra);
             log_pam_step(arg, what);
             if (retval == PAM_SUCCESS) {
 
@@ -225,18 +226,18 @@ void *pam_thread(void *parg)
                       break;
 
                     } else { // pam_acct_mgmt
-                      ptr_xauth->pt_arg.pam_do_state = PAM_TERM;
-                      ptr_xauth->pt_arg.pam_state = PAM_AUTH_FAIL;
+                      ptr_xauth->ptarg.pam_do_state = PAM_TERM;
+                      ptr_xauth->ptarg.pam_state = PAM_AUTH_FAIL;
 
                       bool success = FALSE;
-                      struct state *st = (struct state *) ptr_xauth->pt_arg.ptr_state;
+                      struct state *st = (struct state *) ptr_xauth->ptarg.ptr_state;
 
                       passert(st != NULL);
                       so_serial_t old_state = push_cur_state(st);
 
-                      ptr_xauth->callback(st, ptr_xauth->pt_arg.name, success);
+                      ptr_xauth->callback(st, ptr_xauth->ptarg.name, success);
                       libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_authenticate",
-                                    ptr_xauth->pt_arg.st_serialno, ptr_xauth->pt_arg.name,
+                                    ptr_xauth->ptarg.st_serialno, ptr_xauth->ptarg.name,
                                     success ? "SUCCESSS" : "FAILURE");
 
                       pop_cur_state(old_state);
@@ -247,18 +248,18 @@ void *pam_thread(void *parg)
                   break;
                 } else { // pam_authenticate
 
-                  ptr_xauth->pt_arg.pam_do_state = PAM_TERM;
-                  ptr_xauth->pt_arg.pam_state = PAM_AUTH_FAIL;
+                  ptr_xauth->ptarg.pam_do_state = PAM_TERM;
+                  ptr_xauth->ptarg.pam_state = PAM_AUTH_FAIL;
 
                   bool success = FALSE;
-                  struct state *st = (struct state *) ptr_xauth->pt_arg.ptr_state;
+                  struct state *st = (struct state *) ptr_xauth->ptarg.ptr_state;
 
                   passert(st != NULL);
                   so_serial_t old_state = push_cur_state(st);
 
-                  ptr_xauth->callback(st, ptr_xauth->pt_arg.name, success);
+                  ptr_xauth->callback(st, ptr_xauth->ptarg.name, success);
                   libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_authenticate",
-                                ptr_xauth->pt_arg.st_serialno, ptr_xauth->pt_arg.name,
+                                ptr_xauth->ptarg.st_serialno, ptr_xauth->ptarg.name,
                                 success ? "SUCCESSS" : "FAILURE");
 
                   pop_cur_state(old_state);
@@ -269,18 +270,18 @@ void *pam_thread(void *parg)
               break;
             } else { //pam_set_item
 
-              ptr_xauth->pt_arg.pam_do_state = PAM_TERM;
-              ptr_xauth->pt_arg.pam_state = PAM_AUTH_FAIL;
+              ptr_xauth->ptarg.pam_do_state = PAM_TERM;
+              ptr_xauth->ptarg.pam_state = PAM_AUTH_FAIL;
 
               bool success = FALSE;
-              struct state *st = (struct state *) ptr_xauth->pt_arg.ptr_state;
+              struct state *st = (struct state *) ptr_xauth->ptarg.ptr_state;
 
               passert(st != NULL);
               so_serial_t old_state = push_cur_state(st);
 
-              ptr_xauth->callback(st, ptr_xauth->pt_arg.name, success);
+              ptr_xauth->callback(st, ptr_xauth->ptarg.name, success);
               libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_authenticate",
-                            ptr_xauth->pt_arg.st_serialno, ptr_xauth->pt_arg.name,
+                            ptr_xauth->ptarg.st_serialno, ptr_xauth->ptarg.name,
                             success ? "SUCCESSS" : "FAILURE");
 
               pop_cur_state(old_state);
@@ -293,18 +294,18 @@ void *pam_thread(void *parg)
         } else {  //pam_start
 
 
-          ptr_xauth->pt_arg.pam_do_state = PAM_DO_NOTHING;
-          ptr_xauth->pt_arg.pam_state = PAM_AUTH_FAIL;
+          ptr_xauth->ptarg.pam_do_state = PAM_DO_NOTHING;
+          ptr_xauth->ptarg.pam_state = PAM_AUTH_FAIL;
 
           bool success = FALSE;
-          struct state *st = (struct state *) ptr_xauth->pt_arg.ptr_state;
+          struct state *st = (struct state *) ptr_xauth->ptarg.ptr_state;
 
           passert(st != NULL);
           so_serial_t old_state = push_cur_state(st);
 
-          ptr_xauth->callback(st, ptr_xauth->pt_arg.name, success);
+          ptr_xauth->callback(st, ptr_xauth->ptarg.name, success);
           libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_authenticate",
-                        ptr_xauth->pt_arg.st_serialno, ptr_xauth->pt_arg.name,
+                        ptr_xauth->ptarg.st_serialno, ptr_xauth->ptarg.name,
                         success ? "SUCCESSS" : "FAILURE");
 
           pop_cur_state(old_state);
@@ -313,7 +314,7 @@ void *pam_thread(void *parg)
 
       } // loop
 
-    } else if(arg->pam_do_state == PAM_SESSION_START) {
+    } else if(ptr_xauth->ptarg.pam_do_state == PAM_SESSION_START) {
 
       for (int i = 0; i < 5; i++) {
         what = "pam_open_session";
@@ -322,34 +323,34 @@ void *pam_thread(void *parg)
         if (retval == PAM_SUCCESS) {
 
           bool success = TRUE;
-          struct state *st = (struct state *) ptr_xauth->pt_arg.ptr_state;
+          struct state *st = (struct state *) ptr_xauth->ptarg.ptr_state;
 
           passert(st != NULL);
           so_serial_t old_state = push_cur_state(st);
 
-          ptr_xauth->callback(st, ptr_xauth->pt_arg.name, success);
+          ptr_xauth->callback(st, ptr_xauth->ptarg.name, success);
           libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_authenticate",
-                        ptr_xauth->pt_arg.st_serialno, ptr_xauth->pt_arg.name,
+                        ptr_xauth->ptarg.st_serialno, ptr_xauth->ptarg.name,
                         success ? "SUCCESSS" : "FAILURE");
 
           pop_cur_state(old_state);
 
-          ptr_xauth->pt_arg.pam_state = PAM_SESSION_START_SUCCESS;
+          ptr_xauth->ptarg.pam_state = PAM_SESSION_START_SUCCESS;
 
           break;
         } else {
-          ptr_xauth->pt_arg.pam_state = PAM_SESSION_START_FAIL;
-          ptr_xauth->pt_arg.pam_do_state = PAM_TERM;
+          ptr_xauth->ptarg.pam_state = PAM_SESSION_START_FAIL;
+          ptr_xauth->ptarg.pam_do_state = PAM_TERM;
 
           bool success = FALSE;
-          struct state *st = (struct state *) ptr_xauth->pt_arg.ptr_state;
+          struct state *st = (struct state *) ptr_xauth->ptarg.ptr_state;
 
           passert(st != NULL);
           so_serial_t old_state = push_cur_state(st);
 
-          ptr_xauth->callback(st, ptr_xauth->pt_arg.name, success);
+          ptr_xauth->callback(st, ptr_xauth->ptarg.name, success);
           libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_authenticate",
-                        ptr_xauth->pt_arg.st_serialno, ptr_xauth->pt_arg.name,
+                        ptr_xauth->ptarg.st_serialno, ptr_xauth->ptarg.name,
                         success ? "SUCCESSS" : "FAILURE");
 
           pop_cur_state(old_state);
@@ -358,33 +359,33 @@ void *pam_thread(void *parg)
         }
       }
 
-    } else if(arg->pam_do_state == PAM_SESSION_END) {
+    } else if(ptr_xauth->ptarg.pam_do_state == PAM_SESSION_END) {
 
       for (int i = 0; i < 5; i++) {
         what = "pam_close_session";
         retval = pam_close_session(pamh, PAM_SILENT);
         log_pam_step(arg, what);
         if (retval == PAM_SUCCESS) {
-          ptr_xauth->pt_arg.pam_state = PAM_SESSION_END_SUCCESS;
-          ptr_xauth->pt_arg.pam_do_state = PAM_TERM;
+          ptr_xauth->ptarg.pam_state = PAM_SESSION_END_SUCCESS;
+          ptr_xauth->ptarg.pam_do_state = PAM_TERM;
 
 
 
           break;
         } else {
 
-          ptr_xauth->pt_arg.pam_state = PAM_AUTH_FAIL;
-          ptr_xauth->pt_arg.pam_do_state = PAM_TERM;
+          ptr_xauth->ptarg.pam_state = PAM_AUTH_FAIL;
+          ptr_xauth->ptarg.pam_do_state = PAM_TERM;
 
           bool success = FALSE;
-          struct state *st = (struct state *) ptr_xauth->pt_arg.ptr_state;
+          struct state *st = (struct state *) ptr_xauth->ptarg.ptr_state;
 
           passert(st != NULL);
           so_serial_t old_state = push_cur_state(st);
 
-          ptr_xauth->callback(st, ptr_xauth->pt_arg.name, success);
+          ptr_xauth->callback(st, ptr_xauth->ptarg.name, success);
           libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_authenticate",
-                        ptr_xauth->pt_arg.st_serialno, ptr_xauth->pt_arg.name,
+                        ptr_xauth->ptarg.st_serialno, ptr_xauth->ptarg.name,
                         success ? "SUCCESSS" : "FAILURE");
 
           pop_cur_state(old_state);
@@ -393,20 +394,20 @@ void *pam_thread(void *parg)
         }
       }
 
-    } else if(arg->pam_do_state == PAM_TERM) {
+    } else if(ptr_xauth->ptarg.pam_do_state == PAM_TERM) {
       what = "pam_end";
       retval = pam_end(pamh, retval);
       log_pam_step(arg, what);
       if (retval == PAM_SUCCESS) {
-        ptr_xauth->pt_arg.pam_state = PAM_TERM_SUCCESS;
+        ptr_xauth->ptarg.pam_state = PAM_TERM_SUCCESS;
         break;
-      } else {  arg->pam_state = PAM_TERM_FAIL; }
+      } else {  ptr_xauth->ptarg.pam_state = PAM_TERM_FAIL; }
     }
 //	libreswan_log("XAUTH: THREAD LOOP????");
     usleep(100000); // 100ms because, because we are efficient pffft.
 
-  } while(thread_operation(&arg->thread_run_m));
+  } while(thread_operation(&ptr_xauth->ptarg.thread_run_m));
 
-  libreswan_log("XAUTH: PAM thread completed pam_do_state=%d pam_state=%d", ((int)arg->pam_do_state),((int) arg->pam_state ));
+  libreswan_log("XAUTH: PAM thread completed pam_do_state=%d pam_state=%d", ((int)ptr_xauth->ptarg.pam_do_state),((int) ptr_xauth->ptarg.pam_state ));
   return NULL; 
 }
