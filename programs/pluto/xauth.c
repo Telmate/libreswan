@@ -278,7 +278,6 @@ void xauth_start_pam_thread(struct state *st,
 	} else {
 
       	st->st_xauth = xauth;
-
     	pstats_xauth_started++;
 
 	}
