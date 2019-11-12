@@ -369,8 +369,8 @@ void *pam_thread(void *parg)
 
     }
 
-    usleep(100000); // 100ms because, because we are efficient pffft.
-    libreswan_log("XAUTH: PAM");
+    usleep(200000); // 100ms because, because we are efficient pffft.
+    //libreswan_log("XAUTH: PAM");
 
   } while(thread_operation(&ptr_xauth->ptarg.thread_run_m) == 0);
 
