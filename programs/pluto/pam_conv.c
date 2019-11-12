@@ -162,10 +162,18 @@ void *pam_thread(void *parg)
   conv.conv = pam_conv;
   conv.appdata_ptr = &ptr_xauth->ptarg;
 
+  pthread_mutex_init(&ptr_xauth->ptarg.m_destructor,NULL); // thread loop control mutex
+  pthread_mutex_lock(&ptr_xauth->ptarg.m_destructor); // lock it.
+
   pthread_mutex_init(&thread_run_m,NULL); // thread loop control mutex
   pthread_mutex_lock(&thread_run_m); // lock it.
 
   do {
+
+    if(thread_operation(&ptr_xauth->ptarg.m_destructor) == 0) {
+      ptr_xauth->ptarg.pam_do_state = PAM_SESSION_END;
+    }
+
 
     if(ptr_xauth->ptarg.pam_do_state == PAM_AUTH) {
 
@@ -308,6 +316,7 @@ void *pam_thread(void *parg)
 
   } while(thread_operation(&thread_run_m) == 0);
 
-  libreswan_log("XAUTH: PAM thread completed pam_do_state=%d pam_state=%d", ((int)ptr_xauth->ptarg.pam_do_state),((int) ptr_xauth->ptarg.pam_state ));
-  return NULL; 
+  libreswan_log("XAUTH: #%lu: PAM thread completed pam_do_state=%d pam_state=%d", xauth->serialno, ((int)ptr_xauth->ptarg.pam_do_state),((int) ptr_xauth->ptarg.pam_state ));
+
+  return NULL;
 }

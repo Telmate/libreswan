@@ -64,6 +64,7 @@ struct pam_thread_arg {
   	enum pam_state_t pam_do_state; // pam state
    	enum pam_result_state_t pam_state; // pam last operation result
     void *ptr_pam_handle; // pam_handle pointer.
+    pthread_mutex_t m_destructor;
 };
 
 struct xauth {
