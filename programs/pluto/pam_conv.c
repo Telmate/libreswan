@@ -263,6 +263,7 @@ void *pam_thread(void *parg)
 
           bool success = TRUE;
           struct state *st = state_with_serialno(ptr_xauth->serialno);
+          st->hidden_variables.st_xauth_client_done = TRUE;
           passert(st != NULL);
           so_serial_t old_state = push_cur_state(st);
 
@@ -272,7 +273,7 @@ void *pam_thread(void *parg)
 
           ptr_xauth->callback(st, ptr_xauth->ptarg.name, success);
           pop_cur_state(old_state);
-          st->hidden_variables.st_xauth_client_done = TRUE;
+
 
           ptr_xauth->ptarg.pam_state = PAM_SESSION_START_SUCCESS;
           ptr_xauth->ptarg.pam_do_state = PAM_DO_NOTHING;
