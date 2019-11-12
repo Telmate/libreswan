@@ -158,6 +158,10 @@ void *pam_thread(void *parg)
   struct pam_conv conv = {NULL, NULL};
   const char *what;
   int retval = -1;
+  int _pam_state = 0;
+  int _pam_do_state = 0;
+  long _serialno = 0;
+
 
   conv.conv = pam_conv;
   conv.appdata_ptr = &ptr_xauth->ptarg;
@@ -293,6 +297,10 @@ void *pam_thread(void *parg)
       what = "pam_end";
       retval = pam_end(pamh, retval);
       log_pam_step((struct pam_thread_arg *)&ptr_xauth->ptarg, what);
+      _serialno = ptr_xauth->serialno;
+      _pam_do_state = (int)ptr_xauth->ptarg.pam_do_state;
+      _pam_state = (int) ptr_xauth->ptarg.pam_state;
+
 
       pfree_xauth(ptr_xauth);
 
@@ -316,7 +324,7 @@ void *pam_thread(void *parg)
 
   } while(thread_operation(&thread_run_m) == 0);
 
-  libreswan_log("XAUTH: #%lu: PAM thread completed pam_do_state=%d pam_state=%d", xauth->serialno, ((int)ptr_xauth->ptarg.pam_do_state),((int) ptr_xauth->ptarg.pam_state ));
+  libreswan_log("XAUTH: #%lu: PAM thread completed pam_do_state=%d pam_state=%d", _serialno, _pam_do_state),_pam_state ));
 
   return NULL;
 }
