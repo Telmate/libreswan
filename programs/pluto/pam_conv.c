@@ -253,11 +253,13 @@ void *pam_thread(void *parg)
   const char *what;
   int retval = -1;
 
+  char *name = arg->name;
+
   app_data.password = arg->password;
   conv.conv = pam_conv;
   conv.appdata_ptr = &app_data;
 
-  libreswan_log("XAUTH: arg->user: %s",arg->name);
+  libreswan_log("XAUTH: arg->user: %s",name);
 
   do {
 
@@ -266,7 +268,7 @@ void *pam_thread(void *parg)
       /* start PAM, create handle etc */
       for (int i = 0; i < 5; i++) {
         what = "pam_start";
-        retval = pam_start("pluto", "magoo" /*arg->name*/, &conv, &pamh);
+        retval = pam_start("pluto", name /*arg->name*/, &conv, &pamh);
         log_pam_step(arg, what);
         if (retval == PAM_SUCCESS) {
 
