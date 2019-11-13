@@ -309,8 +309,8 @@ void *pam_thread(void *parg)
     } else if(ptr_xauth->ptarg.pam_do_state == PAM_TERM) {
 
       ptr_xauth->abort = TRUE;
-      struct state *st = state_with_serialno(ptr_xauth->serialno);
-      ptr_xauth->callback(st, ptr_xauth->ptarg.name, FALSE);
+      //struct state *st = state_with_serialno(ptr_xauth->serialno);
+      //ptr_xauth->callback(st, ptr_xauth->ptarg.name, FALSE);
 
 
       what = "pam_end";
