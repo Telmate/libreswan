@@ -310,7 +310,7 @@ void *pam_thread(void *parg)
 
       ptr_xauth->abort = TRUE;
       struct state *st = state_with_serialno(ptr_xauth->serialno);
-      ikev1_xauth_callback(st,ptr_xauth->ptarg.name,FALSE);
+      ptr_xauth->callback(st, ptr_xauth->ptarg.name, FALSE);
 
 
       what = "pam_end";
