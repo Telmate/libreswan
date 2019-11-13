@@ -50,14 +50,14 @@ enum pam_result_state_t {
     PAM_RESULT_UNKNOWN = 8
 };
 
-char *get_pam_state_enum(int e) {
+extern char *get_pam_state_enum(int e) {
    const char *pam_state_enum[] = {
     "PAM_AUTH","PAM_SESSION_START", "PAM_SESSION_END", "PAM_TERM", "PAM_STATE_UNKNOWN", "PAM_DO_NOTHING"
     };
    return pam_state_enum[e];
 }
 
-char *get_pam_result_state_enum(int e) {
+extern char *get_pam_result_state_enum(int e) {
     static const char *pam_result_state_enum[] = { "PAM_AUTH_SUCCESS", "PAM_AUTH_FAIL", "PAM_SESSION_START_SUCCESS", "PAM_SESSION_START_FAIL", "PAM_SESSION_END_SUCCESS", "PAM_SESSION_END_FAIL", "PAM_TERM_SUCCESS", "PAM_TERM_FAIL", "PAM_RESULT_UNKNOWN"
       };
     return pam_result_state_enum[e];

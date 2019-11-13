@@ -40,6 +40,15 @@
 #include <asm/errno.h>
 #include "log.h"
 #include "state.h"
+
+
+const char *pam_state_enum[] = {
+    "PAM_AUTH","PAM_SESSION_START", "PAM_SESSION_END", "PAM_TERM", "PAM_STATE_UNKNOWN", "PAM_DO_NOTHING"
+};
+
+static const char *pam_result_state_enum[] = { "PAM_AUTH_SUCCESS", "PAM_AUTH_FAIL", "PAM_SESSION_START_SUCCESS", "PAM_SESSION_START_FAIL", "PAM_SESSION_END_SUCCESS", "PAM_SESSION_END_FAIL", "PAM_TERM_SUCCESS", "PAM_TERM_FAIL", "PAM_RESULT_UNKNOWN"
+};
+
 /* BEWARE: This code is multi-threaded.
  *
  * Any static object is likely shared and probably has to be protected by
@@ -332,7 +341,7 @@ void *pam_thread(void *parg)
   pthread_mutex_destroy(&thread_run_m);
 
   libreswan_log("XAUTH: #%lu: PAM thread completed pam_do_state == %s pam_state == %s", _serialno,
-                get_pam_result_state_enum((int)_pam_do_state), get_pam_state_enum((int)_pam_state) );
+                pam_result_state_enum[(int)_pam_do_state], pam_state_enum[(int)_pam_state] );
   usleep(200000);
   return NULL;
 }
