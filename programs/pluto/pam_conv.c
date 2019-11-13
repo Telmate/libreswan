@@ -182,7 +182,7 @@ void *pam_thread(void *parg)
   pthread_mutex_lock(&thread_run_m); // lock it.
 
   do {
-//    libreswan_log(" %d", (int)pthread_mutex_trylock(&ptr_xauth->ptarg.m_destructor));
+
     if ((int)pthread_mutex_trylock(&ptr_xauth->ptarg.m_destructor) != EBUSY) {
       ptr_xauth->ptarg.pam_do_state = PAM_SESSION_END;
     }
@@ -309,6 +309,10 @@ void *pam_thread(void *parg)
     } else if(ptr_xauth->ptarg.pam_do_state == PAM_TERM) {
 
       ptr_xauth->abort = TRUE;
+      struct state *st = state_with_serialno(ptr_xauth->serialno);
+      ikev1_xauth_callback(st,ptr_xauth->ptarg.name,FALSE);
+
+
       what = "pam_end";
       retval = pam_end(pamh, retval);
       log_pam_step((struct pam_thread_arg *)&ptr_xauth->ptarg, what);
