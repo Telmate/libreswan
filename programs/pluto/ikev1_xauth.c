@@ -1209,8 +1209,9 @@ static int xauth_launch_authent(struct state *st,
 	 * XAUTH somehow already in progress?
 	 */
 #ifdef XAUTH_HAVE_PAM
-	if (st->st_xauth != NULL)
-		return 0;
+	if (st->st_xauth != NULL) {
+      return 0;
+	}
 #endif
 
 	char *arg_name = alloc_bytes(name->len + 1, "XAUTH Name");

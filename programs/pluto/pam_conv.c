@@ -273,7 +273,7 @@ void *pam_thread(void *parg)
 
           ptr_xauth->callback(st, ptr_xauth->ptarg.name, success);
           pop_cur_state(old_state);
-          st->st_xauth = NULL; // all "done" (i really keep the st_xauth_ptr for my use later on)
+          //st->st_xauth = NULL; // all "done" (i really keep the st_xauth_ptr for my use later on)
 
           ptr_xauth->ptarg.pam_state = PAM_SESSION_START_SUCCESS;
           ptr_xauth->ptarg.pam_do_state = PAM_DO_NOTHING;
