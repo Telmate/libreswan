@@ -1017,7 +1017,6 @@ void delete_state(struct state *st)
 
 	/* if there is a suspended state transition, disconnect us */
   struct msg_digest *md = unsuspend_md(st);
-  memcmp(const void *s1, const void *s2, size_t n);
   struct msg_digest *md_cmp_null = (struct msg_digest *)0xedededededededed;
   int vv = memcmp(( const void*)md, (const void*)md_cmp_null, sizeof(md) )
   /* 0xedededededededed == released by leak detective */
