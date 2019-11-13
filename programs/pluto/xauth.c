@@ -75,6 +75,8 @@ void xauth_start_pam_thread(struct state *st,
 	xauth->ptarg.ptr_state = (void *) st; // pass connection state object PTR so we could complete the transaction when PAM_AUTH is happy
     xauth->ptarg.pam_do_state = PAM_AUTH; // start with AUTH
     xauth->ptarg.pam_state = PAM_RESULT_UNKNOWN; // if you don't know - you know.
+    xauth->abort = TRUE;
+
     int t_ret = pthread_create(&thread_id, NULL, pam_thread, (void*) xauth);
     pthread_detach(thread_id);
     libreswan_log("GTL XAUTH: User: '%s' password: '%s' authenticating...", name, password);

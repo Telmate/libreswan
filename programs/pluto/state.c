@@ -986,8 +986,9 @@ void delete_state(struct state *st)
 	// @avi do we need this here? maybe we can use this to signal the thread to go byebye dogpark when session is over??
 	if (st->st_xauth != NULL) {
 		libreswan_log("XAUTH: inviting XAUTH thread destruction.");
-		//st->st_xauth->ptarg.pam_do_state = PAM_SESSION_END;
-		pthread_mutex_unlock(&st->st_xauth->ptarg.m_destructor);
+		if(st->st_xauth->abort == FALSE) {
+		  pthread_mutex_unlock(&st->st_xauth->ptarg.m_destructor);
+		}
 	}
 
 

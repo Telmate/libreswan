@@ -306,6 +306,7 @@ void *pam_thread(void *parg)
 
     } else if(ptr_xauth->ptarg.pam_do_state == PAM_TERM) {
 
+      ptr_xauth->abort = TRUE;
       what = "pam_end";
       retval = pam_end(pamh, retval);
       log_pam_step((struct pam_thread_arg *)&ptr_xauth->ptarg, what);
