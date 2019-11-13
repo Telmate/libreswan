@@ -1017,7 +1017,7 @@ void delete_state(struct state *st)
 		DBG(DBG_CONTROL,
 		    DBG_log("disconnecting state #%lu from md",
 			    st->st_serialno));
-		release_any_md(&md);
+		//release_any_md(&md);
 	}
 
 	if (send_delete_check(st)) {
