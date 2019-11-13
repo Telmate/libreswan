@@ -297,7 +297,7 @@ struct state {
 
 #ifdef XAUTH_HAVE_PAM
 	struct xauth *st_xauth;			/* per state xauth/pam thread */
-	struct xauth *st_xauth_ptr;     /* this is a backup pointer placment since st_xauth needs to be NULLified after auth.
+	struct xauth *st_xauth_ptr;     /* this is a backup pointer placment since st_xauth needs to be NULLified after auth. */
 #endif
 
 	bool st_ikev2;                          /* is this an IKEv2 state? */
