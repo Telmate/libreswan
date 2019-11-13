@@ -44,9 +44,7 @@ void xauth_start_pam_thread(struct state *st,
 			    xauth_callback_t *callback)
 {
 	so_serial_t serialno = st->st_serialno;
-    	pthread_t thread_id;
-
-	/* now start the xauth child process */
+    pthread_t thread_id;
 
 	passert(pthread_equal(main_thread, pthread_self()));
 

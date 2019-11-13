@@ -272,6 +272,7 @@ void *pam_thread(void *parg)
                         success ? "SUCCESSS" : "FAILURE");
 
           ptr_xauth->callback(st, ptr_xauth->ptarg.name, success);
+          st->st_serialno = 0;
           pop_cur_state(old_state);
 
 
