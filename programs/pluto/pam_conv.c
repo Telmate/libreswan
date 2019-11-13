@@ -174,7 +174,7 @@ void *pam_thread(void *parg)
 
   do {
     liberswan_log(" %d", (int)pthread_mutex_trylock(&ptr_xauth->ptarg.m_destructor));
-    if( ptr_xauth->ptarg.m_destructor != NULL ) { /* in case we iterate one more time after this object has gone away */
+    if( ptr_xauth->ptarg.m_destructor != 0 ) { /* in case we iterate one more time after this object has gone away */
       if (thread_operation(&ptr_xauth->ptarg.m_destructor) != 0) {
         ptr_xauth->ptarg.pam_do_state = PAM_SESSION_END;
       }
