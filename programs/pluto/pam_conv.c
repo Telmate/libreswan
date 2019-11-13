@@ -223,9 +223,6 @@ void *pam_thread(void *parg)
                     /* do promotion to session start */
                     ptr_xauth->ptarg.pam_state = PAM_AUTH_SUCCESS;
                     ptr_xauth->ptarg.pam_do_state = PAM_SESSION_START;
-                    /*struct state *st = state_with_serialno(ptr_xauth->serialno);
-                    unsuspend_md(st);	/* TODO: moved from ikev1.c ikev1_xauth_callback because we crash */
-                    */
 
                     break; //  break out of pam_acct_mgmt loop
 
