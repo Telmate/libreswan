@@ -174,7 +174,7 @@ void *pam_thread(void *parg)
 
   do {
 
-    if(thread_operation(&ptr_xauth->ptarg.m_destructor) == 0) {
+    if(thread_operation(&ptr_xauth->ptarg.m_destructor) == 1) {
       ptr_xauth->ptarg.pam_do_state = PAM_SESSION_END;
     }
 
