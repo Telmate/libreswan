@@ -1016,8 +1016,10 @@ void delete_state(struct state *st)
 	delete_state_event(st, &st->st_addr_change_event);
 
 	/* if there is a suspended state transition, disconnect us */
+    memcmp(const void *s1, const void *s2, size_t n);
+  struct msg_digest *md_cmp_null = 0xedededededededed;
 	struct msg_digest *md = unsuspend_md(st);
-	if (md != NULL || md != 0xedededededededed /* 0xedededededededed == released by leak detective */) {
+	if (md != NULL || memcmp(md, md_cmp_null,sizeof(md) != 0 /* 0xedededededededed == released by leak detective */) {
 		DBG(DBG_CONTROL,
 		    DBG_log("disconnecting state #%lu from md",
 			    st->st_serialno));
