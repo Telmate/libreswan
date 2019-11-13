@@ -65,6 +65,7 @@
 
 #include "pluto_sd.h"
 #include "pam_conv.h"
+#include <pthread.h>
 /*
  * This file has the event handling routines. Events are
  * kept as a linked list of event structures. These structures
