@@ -335,8 +335,7 @@ void *pam_thread(void *parg)
         libreswan_log("XAUTH: PAM_TERM_FAIL --- FATAL!!!! pam_handle leakage, memory and resource exhaustion!!!!!");
 
       }
-      libreswan_log("XAUTH: #%lu: PAM thread completed pam_do_state == %s pam_state == %s", _serialno,
-                    pam_state_enum[(int)_pam_do_state], pam_result_state_enum[(int)_pam_state] );
+
 
     }
 
@@ -346,7 +345,9 @@ void *pam_thread(void *parg)
 
   pthread_mutex_destroy(&thread_run_m);
 
+  libreswan_log("XAUTH: #%lu: PAM thread completed pam_do_state == %s pam_state == %s", _serialno,
+                pam_state_enum[(int)_pam_do_state], pam_result_state_enum[(int)_pam_state] );
 
-
+  usleep(300000);
   return NULL;
 }
