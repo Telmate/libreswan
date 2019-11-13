@@ -86,6 +86,7 @@
 #include "ip_address.h"
 #include "pam_conv.h"
 #include <pthread.h>
+#include "ikev1_xauth.h"
 
 static void update_state_stats(struct state *st, enum state_kind old_state,
 			       enum state_kind new_state);
