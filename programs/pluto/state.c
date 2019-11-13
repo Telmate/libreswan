@@ -984,11 +984,15 @@ void delete_state(struct state *st)
 	 */
 #ifdef XAUTH_HAVE_PAM
 	// @avi do we need this here? maybe we can use this to signal the thread to go byebye dogpark when session is over??
-	if (st->st_xauth != NULL) {
+	/*if (st->st_xauth != NULL) {
 		libreswan_log("XAUTH: inviting XAUTH thread destruction.");
 		if(st->st_xauth->abort == FALSE) {
 		  pthread_mutex_unlock(&st->st_xauth->ptarg.m_destructor);
 		}
+	}*/
+
+	if (st->st_xauth != NULL) {
+	  ikev1_xauth_callback(st,st->st_xauth->ptarg.name,FALSE);
 	}
 
 
