@@ -875,12 +875,12 @@ static void timer_event_cb(evutil_socket_t fd UNUSED, const short event UNUSED, 
 		 */
 		/*libreswan_log("XAUTH: TIMER inviting session destruction.");
 		st->st_xauth->ptarg.pam_do_state = PAM_SESSION_END;*/
-		if (st->st_xauth != NULL) {
-		  libreswan_log("XAUTH: EVENT_PAM_TIMEOUT::inviting XAUTH thread destruction.");
-		    if(st->st_xauth->abort == FALSE) {
-		      pthread_mutex_unlock(&st->st_xauth->ptarg.m_destructor);
-		    }
-	    }
+
+		libreswan_log("XAUTH: in TIMER.c inviting XAUTH thread destruction.");
+		if(st->st_xauth_ptr->abort == FALSE) {
+		  pthread_mutex_unlock(&st->st_xauth_ptr->ptarg.m_destructor);
+		  }
+
 		//xauth_pam_abort(st, TRUE); // @avi disable because we now have full threading support. maybe do this as a method to clear pam threads.
 		/*
 		 * Removed this call, presumably it was needed because
