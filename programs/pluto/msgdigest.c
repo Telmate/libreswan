@@ -121,8 +121,8 @@ void release_md(struct msg_digest *md)
 	 * Shred to useless value.
 	 * Redundant but might catch dangling references.
 	 */
-	memset(md, 0xED, sizeof(struct msg_digest));
-
+	//memset(md, 0xED, sizeof(struct msg_digest));
+    md = NULL;
 	md->next = md_pool;
 	md_pool = md;
 #endif
@@ -130,9 +130,7 @@ void release_md(struct msg_digest *md)
 
 void release_any_md(struct msg_digest **mdp)
 {
-    struct msg_digest *md_already_shred = NULL;
-    memset(md_already_shred, 0xED, sizeof(struct msg_digest));
-	if (*mdp != NULL || *mdp != md_already_shred) {
+	if (*mdp != NULL) {
 		release_md(*mdp);
 		*mdp = NULL;
 	}
