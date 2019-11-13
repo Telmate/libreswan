@@ -173,11 +173,13 @@ void *pam_thread(void *parg)
   pthread_mutex_lock(&thread_run_m); // lock it.
 
   do {
-    libreswan_log(" %d", (int)pthread_mutex_trylock(&ptr_xauth->ptarg.m_destructor));
-/*    if( ptr_xauth->ptarg.m_destructor != N) { // in case we iterate one more time after this object has gone away
-      if (thread_operation(&ptr_xauth->ptarg.m_destructor) != 0) {
-        ptr_xauth->ptarg.pam_do_state = PAM_SESSION_END;
-      }
+//    libreswan_log(" %d", (int)pthread_mutex_trylock(&ptr_xauth->ptarg.m_destructor));
+    if ((int)pthread_mutex_trylock(&ptr_xauth->ptarg.m_destructor) != EBUSY) {
+      ptr_xauth->ptarg.pam_do_state = PAM_SESSION_END;
+    }
+
+
+    /*    if( ptr_xauth->ptarg.m_destructor != N) { // in case we iterate one more time after this object has gone away
     }*/
 
     if(ptr_xauth->ptarg.pam_do_state == PAM_AUTH) {
