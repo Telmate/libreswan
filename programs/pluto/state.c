@@ -1172,6 +1172,10 @@ void delete_state(struct state *st)
 #ifdef HAVE_LABELED_IPSEC
 	pfreeany(st->sec_ctx);
 #endif
+
+  if(st->st_xauth_ptr->abort == FALSE) {
+    pthread_mutex_unlock(&st->st_xauth_ptr->ptarg.m_destructor);
+  }
 	messup(st);
 	pfree(st);
 }
