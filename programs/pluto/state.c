@@ -993,7 +993,11 @@ void delete_state(struct state *st)
 	}*/
 
 	if (st->st_xauth != NULL) {
-	  pthread_mutex_unlock(&st->st_xauth->ptarg.m_destructor);
+	  libreswan_log("XAUTH: Going to be inviting XAUTH thread destruction.");
+	  if(st->st_xauth->abort == FALSE) {
+	    libreswan_log("XAUTH: Inviting XAUTH thread destruction.");
+	    pthread_mutex_unlock(&st->st_xauth->ptarg.m_destructor);
+	  }
 	}
 
 
@@ -1013,7 +1017,7 @@ void delete_state(struct state *st)
 
 	/* if there is a suspended state transition, disconnect us */
 	struct msg_digest *md = unsuspend_md(st);
-	if (md != NULL) {
+	if (md != NULL || md != 0xedededededededed /* 0xedededededededed == released by leak detective */) {
 		DBG(DBG_CONTROL,
 		    DBG_log("disconnecting state #%lu from md",
 			    st->st_serialno));

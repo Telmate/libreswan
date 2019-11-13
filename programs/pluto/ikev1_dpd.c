@@ -358,7 +358,7 @@ static void p1_dpd_outI1(struct state *p1st)
 		return;
 	}
 
-	// TODO: @avi dpd
+	// TODO: @avi. original code had a bug - it seems like it was comparing the sn from phase1 while phase2 may update the sa(and serial)
 	if (st->st_connection->newest_ipsec_sa != p2st->st_serialno) {
 		DBG(DBG_DPD,
 		    DBG_log("DPD: no need to send or schedule DPD for replaced IPsec SA"));
