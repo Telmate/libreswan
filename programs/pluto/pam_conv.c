@@ -265,15 +265,17 @@ void *pam_thread(void *parg)
 
           bool success = TRUE;
           struct state *st = state_with_serialno(ptr_xauth->serialno);
-          passert(st != NULL);
-          so_serial_t old_state = push_cur_state(st);
+          //passert(st != NULL);
+          if(st != NULL) {
+            so_serial_t old_state = push_cur_state(st);
 
-          libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_open_session",
-                        ptr_xauth->ptarg.st_serialno, ptr_xauth->ptarg.name,
-                        success ? "SUCCESSS" : "FAILURE");
+            libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_open_session",
+                          ptr_xauth->ptarg.st_serialno, ptr_xauth->ptarg.name,
+                          success ? "SUCCESSS" : "FAILURE");
 
-          ptr_xauth->callback(st, ptr_xauth->ptarg.name, success);
-          pop_cur_state(old_state);
+            ptr_xauth->callback(st, ptr_xauth->ptarg.name, success);
+            pop_cur_state(old_state);
+          }
 
           ptr_xauth->ptarg.pam_state = PAM_SESSION_START_SUCCESS;
           ptr_xauth->ptarg.pam_do_state = PAM_DO_NOTHING;
