@@ -109,7 +109,7 @@ void release_md(struct msg_digest *md)
 
 	/* check that we are not creating a loop */
 	passert(md != md_pool);
-
+#define MSG_DIGEST_ALLOC_DEBUG 1
 #ifdef MSG_DIGEST_ALLOC_DEBUG
 	/*
 	 * This version does not maintain a pool.
@@ -122,7 +122,7 @@ void release_md(struct msg_digest *md)
 	 * Redundant but might catch dangling references.
 	 */
 	//memset(md, 0xED, sizeof(struct msg_digest));
-    md = NULL;
+
 	md->next = md_pool;
 	md_pool = md;
 #endif
