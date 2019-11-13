@@ -331,7 +331,8 @@ void *pam_thread(void *parg)
 
   pthread_mutex_destroy(&thread_run_m);
 
-  libreswan_log("XAUTH: #%lu: PAM thread completed pam_do_state=%d pam_state=%d", _serialno, _pam_do_state,_pam_state );
+  libreswan_log("XAUTH: #%lu: PAM thread completed pam_do_state=%d pam_state=%d", _serialno,
+      pam_result_state_enum[_pam_do_state], pam_state_enum[_pam_state] );
   usleep(200000);
   return NULL;
 }
