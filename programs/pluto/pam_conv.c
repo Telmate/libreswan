@@ -297,9 +297,9 @@ void *pam_thread(void *parg)
       what = "pam_end";
       retval = pam_end(pamh, retval);
       log_pam_step((struct pam_thread_arg *)&ptr_xauth->ptarg, what);
-      _serialno = ptr_xauth->serialno;
-      _pam_do_state = (int)ptr_xauth->ptarg.pam_do_state;
-      _pam_state = (int) ptr_xauth->ptarg.pam_state;
+      _serialno = (ptr_xauth->serialno);
+      _pam_do_state = ((int)ptr_xauth->ptarg.pam_do_state);
+      _pam_state = ((int) ptr_xauth->ptarg.pam_state);
 
 
       pfree_xauth(ptr_xauth);
@@ -320,11 +320,11 @@ void *pam_thread(void *parg)
 
     }
 
-    usleep(200000); // 100ms because, because we are efficient pffft.
+    usleep(100000); // 100ms because, because we are efficient pffft.
 
   } while(thread_operation(&thread_run_m) == 0);
 
   libreswan_log("XAUTH: #%lu: PAM thread completed pam_do_state=%d pam_state=%d", _serialno, _pam_do_state,_pam_state );
-
+  usleep(200000);
   return NULL;
 }

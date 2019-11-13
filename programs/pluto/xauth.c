@@ -1,6 +1,6 @@
-/* XAUTH PAM handling
+/* XAUTH PAM auth & session handling
  *
- * Copyright (C) 2017 Andrew Cagney
+ * Copyright (C) 2019 Avi Saranga <avi@opebsd.org.il>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -80,15 +80,10 @@ void xauth_start_pam_thread(struct state *st,
     libreswan_log("GTL XAUTH: User: '%s' password: '%s' authenticating...", name, password);
 
 	if (t_ret) {
-		libreswan_log("XAUTH: #%lu: creation of PAM thread for user '%s' failed",
-			      xauth->serialno, xauth->ptarg.name);
-		bool a = false;
-		if(a) {
-		  pfree_xauth(xauth);
-		}
+		libreswan_log("XAUTH: #%lu: creation of PAM thread for user '%s' failed", xauth->serialno, xauth->ptarg.name);
+		pfree_xauth(xauth);
 		return;
 	} else {
-
       	st->st_xauth = xauth;
     	pstats_xauth_started++;
 
