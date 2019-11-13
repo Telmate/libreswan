@@ -130,7 +130,7 @@ void release_md(struct msg_digest *md)
 
 void release_any_md(struct msg_digest **mdp)
 {
-    struct msg_digest *md_already_shred;
+    struct msg_digest *md_already_shred = NULL;
     memset(md_already_shred, 0xED, sizeof(struct msg_digest));
 	if (*mdp != NULL || *mdp != md_already_shred) {
 		release_md(*mdp);
