@@ -315,7 +315,7 @@ void *pam_thread(void *parg)
       _pam_state = ((int) ptr_xauth->ptarg.pam_state);
 
 
-      pfree_xauth(ptr_xauth);
+      //pfree_xauth(ptr_xauth);
       pthread_mutex_destroy(&ptr_xauth->ptarg.m_destructor);
 
       if (retval == PAM_SUCCESS) {
