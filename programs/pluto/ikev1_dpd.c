@@ -342,7 +342,7 @@ static void p1_dpd_outI1(struct state *p1st)
 	dpd_outI(p1st, p1st, TRUE, delay, timeout);
 }
 
-static void p2_dpd_outI1(struct state *p2st)
+  static void p2_dpd_outI1(struct state *p2st)
 {
 	struct state *st;
 	deltatime_t delay = p2st->st_connection->dpd_delay;
@@ -359,10 +359,10 @@ static void p2_dpd_outI1(struct state *p2st)
 	}
 
 	// TODO: @avi dpd
-	if (st->st_connection->newest_ipsec_sa != st->st_serialno) {
+	if (st->st_connection->newest_ipsec_sa != p2st->st_serialno) {
 		DBG(DBG_DPD,
 		    DBG_log("DPD: no need to send or schedule DPD for replaced IPsec SA"));
-		//return;
+		return;
 	}
 
 	dpd_outI(st, p2st, TRUE, delay, timeout);
