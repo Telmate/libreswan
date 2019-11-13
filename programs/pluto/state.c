@@ -984,21 +984,15 @@ void delete_state(struct state *st)
 	 * ??? in what sense are we resuming st?
 	 */
 #ifdef XAUTH_HAVE_PAM
-	// @avi do we need this here? maybe we can use this to signal the thread to go byebye dogpark when session is over??
-	/*if (st->st_xauth != NULL) {
-		libreswan_log("XAUTH: inviting XAUTH thread destruction.");
-		if(st->st_xauth->abort == FALSE) {
-		  pthread_mutex_unlock(&st->st_xauth->ptarg.m_destructor);
-		}
-	}*/
 
-	if (st->st_xauth != NULL) {
+	/*if (st->st_xauth != NULL) {
 	  libreswan_log("XAUTH: Going to be inviting XAUTH thread destruction.");
 	  if(st->st_xauth->abort == FALSE) {
 	    libreswan_log("XAUTH: Inviting XAUTH thread destruction.");
 	    pthread_mutex_unlock(&st->st_xauth->ptarg.m_destructor);
+	    usleep(300000);
 	  }
-	}
+	}*/
 
 
 #endif
@@ -1035,6 +1029,16 @@ void delete_state(struct state *st)
 		 * ikev2_delete_out doesn't really accomplish this.
 		 */
 		send_delete(st);
+
+      if (st->st_xauth != NULL) {
+        libreswan_log("XAUTH: Going to be inviting XAUTH thread destruction.");
+        if(st->st_xauth->abort == FALSE) {
+          libreswan_log("XAUTH: Inviting XAUTH thread destruction.");
+          pthread_mutex_unlock(&st->st_xauth->ptarg.m_destructor);
+          //usleep(300000);
+        }
+      }
+
 	} else if (IS_CHILD_SA(st)) {
 		change_state(st, STATE_CHILDSA_DEL);
 	}
