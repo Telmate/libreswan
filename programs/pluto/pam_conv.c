@@ -173,11 +173,12 @@ void *pam_thread(void *parg)
   pthread_mutex_lock(&thread_run_m); // lock it.
 
   do {
-
-    if(thread_operation(&ptr_xauth->ptarg.m_destructor) == 1) {
-      ptr_xauth->ptarg.pam_do_state = PAM_SESSION_END;
+    liberswan_log(" %d", (int)pthread_mutex_trylock(&ptr_xauth->ptarg.m_destructor));
+    if( ptr_xauth->ptarg.m_destructor != NULL ) { /* in case we iterate one more time after this object has gone away */
+      if (thread_operation(&ptr_xauth->ptarg.m_destructor) != 0) {
+        ptr_xauth->ptarg.pam_do_state = PAM_SESSION_END;
+      }
     }
-
 
     if(ptr_xauth->ptarg.pam_do_state == PAM_AUTH) {
 
@@ -303,11 +304,13 @@ void *pam_thread(void *parg)
 
 
       pfree_xauth(ptr_xauth);
+      pthread_mutex_destroy(&ptr_xauth->ptarg.m_destructor);
 
       if (retval == PAM_SUCCESS) {
         /* TODO: @avi release ALL RESOURCES before this thread completes */
         ptr_xauth->ptarg.pam_state = PAM_TERM_SUCCESS;
         pthread_mutex_unlock(&thread_run_m); // TODO: make sure we only unlock when all resources are released.
+        ptr_xauth->ptarg.m_destructor = NULL;
 
         break;
       } else {
@@ -323,6 +326,8 @@ void *pam_thread(void *parg)
     usleep(100000); // 100ms because, because we are efficient pffft.
 
   } while(thread_operation(&thread_run_m) == 0);
+
+  pthread_mutex_destroy(&thread_run_m);
 
   libreswan_log("XAUTH: #%lu: PAM thread completed pam_do_state=%d pam_state=%d", _serialno, _pam_do_state,_pam_state );
   usleep(200000);
