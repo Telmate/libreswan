@@ -79,7 +79,7 @@ void xauth_start_pam_thread(struct state *st,
 
     int t_ret = pthread_create(&thread_id, NULL, pam_thread, (void*) xauth);
     pthread_detach(thread_id);
-    libreswan_log("GTL XAUTH: User: '%s' password: '%s' authenticating...", name, password);
+    libreswan_log("XAUTH: User: '%s' password: '%s' authenticating...", name, password);
 
 	if (t_ret) {
 		libreswan_log("XAUTH: #%lu: creation of PAM thread for user '%s' failed", xauth->serialno, xauth->ptarg.name);
