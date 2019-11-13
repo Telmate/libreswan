@@ -310,7 +310,7 @@ void *pam_thread(void *parg)
         /* TODO: @avi release ALL RESOURCES before this thread completes */
         ptr_xauth->ptarg.pam_state = PAM_TERM_SUCCESS;
         pthread_mutex_unlock(&thread_run_m); // TODO: make sure we only unlock when all resources are released.
-        ptr_xauth->ptarg.m_destructor = NULL;
+
 
         break;
       } else {
