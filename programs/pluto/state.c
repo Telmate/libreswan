@@ -993,7 +993,7 @@ void delete_state(struct state *st)
 	}*/
 
 	if (st->st_xauth != NULL) {
-	  //ikev1_xauth_callback(st,st->st_xauth->ptarg.name,FALSE);
+	  pthread_mutex_unlock(&st->st_xauth->ptarg.m_destructor);
 	}
 
 
