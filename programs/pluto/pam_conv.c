@@ -171,7 +171,7 @@ void *pam_thread(void *parg)
   int _pam_do_state = 0;
   long _serialno = 0;
 
-
+  ptr_xauth->abort = FALSE;
   conv.conv = pam_conv;
   conv.appdata_ptr = &ptr_xauth->ptarg;
 
