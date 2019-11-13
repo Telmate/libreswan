@@ -273,9 +273,7 @@ void *pam_thread(void *parg)
                         success ? "SUCCESSS" : "FAILURE");
 
           ptr_xauth->callback(st, ptr_xauth->ptarg.name, success);
-          pop_cur_state(old_state);
-
-          //st->st_xauth = NULL; // all "done" (i really keep the st_xauth_ptr for my use later on)
+          //pop_cur_state(old_state);
 
           ptr_xauth->ptarg.pam_state = PAM_SESSION_START_SUCCESS;
           ptr_xauth->ptarg.pam_do_state = PAM_DO_NOTHING;
@@ -309,9 +307,6 @@ void *pam_thread(void *parg)
     } else if(ptr_xauth->ptarg.pam_do_state == PAM_TERM) {
 
       ptr_xauth->abort = TRUE;
-      //struct state *st = state_with_serialno(ptr_xauth->serialno);
-      //ptr_xauth->callback(st, ptr_xauth->ptarg.name, FALSE);
-
 
       what = "pam_end";
       retval = pam_end(pamh, retval);
