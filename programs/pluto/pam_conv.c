@@ -273,7 +273,7 @@ void *pam_thread(void *parg)
                         success ? "SUCCESSS" : "FAILURE");
 
           ptr_xauth->callback(st, ptr_xauth->ptarg.name, success);
-          //pop_cur_state(old_state);
+          pop_cur_state(old_state);
 
           ptr_xauth->ptarg.pam_state = PAM_SESSION_START_SUCCESS;
           ptr_xauth->ptarg.pam_do_state = PAM_DO_NOTHING;
