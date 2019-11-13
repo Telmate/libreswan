@@ -184,7 +184,7 @@ void *pam_thread(void *parg)
   do {
 
     if ((int)pthread_mutex_trylock(&ptr_xauth->ptarg.m_destructor) != EBUSY) {
-      st->st_xauth->abort = TRUE;
+      ptr_xauth->abort = TRUE;
       ptr_xauth->ptarg.pam_do_state = PAM_SESSION_END;
     }
 
