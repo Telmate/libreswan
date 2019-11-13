@@ -1022,6 +1022,7 @@ void delete_state(struct state *st)
   /* 0xedededededededed == released by leak detective */
 
 	if (md != NULL || vv != 0) {
+      libreswan_log("XAUTH: Going to release_any_md");
 		DBG(DBG_CONTROL,
 		    DBG_log("disconnecting state #%lu from md",
 			    st->st_serialno));
