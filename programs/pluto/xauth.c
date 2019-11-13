@@ -86,7 +86,7 @@ void xauth_start_pam_thread(struct state *st,
 	} else {
       	st->st_xauth = xauth;
     	pstats_xauth_started++;
-        unsuspend_md(st);	/* TODO: moved from ikev1.c ikev1_xauth_callback because we crash */
+
 	}
 
 }
