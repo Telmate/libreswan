@@ -1016,12 +1016,8 @@ void delete_state(struct state *st)
 	delete_state_event(st, &st->st_addr_change_event);
 
 	/* if there is a suspended state transition, disconnect us */
-  struct msg_digest *md = unsuspend_md(st);
-  struct msg_digest *md_cmp_null = (struct msg_digest *)0xedededededededed;
-  int vv = memcmp(( const void*)md, (const void*)md_cmp_null, sizeof(md) );
-  /* 0xedededededededed == released by leak detective */
-
-	if (md != NULL || vv != 0) {
+    struct msg_digest *md = unsuspend_md(st);
+	if (md != NULL) {
       libreswan_log("XAUTH: Going to release_any_md");
 		DBG(DBG_CONTROL,
 		    DBG_log("disconnecting state #%lu from md",

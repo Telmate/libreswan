@@ -102,6 +102,8 @@ struct msg_digest *alloc_md(const char *mdname)
 
 void release_md(struct msg_digest *md)
 {
+
+
 	freeanychunk(md->raw_packet);
 	pfreeany(md->packet_pbs.start);
 
@@ -128,7 +130,9 @@ void release_md(struct msg_digest *md)
 
 void release_any_md(struct msg_digest **mdp)
 {
-	if (*mdp != NULL) {
+    struct msg_digest *md_already_shred;
+    memset(md_already_shred, 0xED, sizeof(struct msg_digest));
+	if (*mdp != NULL || *mdp != md_already_shred) {
 		release_md(*mdp);
 		*mdp = NULL;
 	}
