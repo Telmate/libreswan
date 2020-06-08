@@ -43,7 +43,7 @@
 
 
 static char *pam_state_enum[] = {
-    "PAM_AUTH","PAM_SESSION_START", "PAM_SESSION_END", "PAM_TERM", "PAM_STATE_UNKNOWN", "PAM_DO_NOTHING"
+    "PAM_AUTH", "PAM_CALLBACK", "PAM_SESSION_START", "PAM_SESSION_END", "PAM_TERM", "PAM_STATE_UNKNOWN", "PAM_DO_NOTHING"
 };
 
 static char *pam_result_state_enum[] = { "PAM_AUTH_SUCCESS", "PAM_AUTH_FAIL", "PAM_SESSION_START_SUCCESS", "PAM_SESSION_START_FAIL", "PAM_SESSION_END_SUCCESS", "PAM_SESSION_END_FAIL", "PAM_TERM_SUCCESS", "PAM_TERM_FAIL", "PAM_RESULT_UNKNOWN"
@@ -223,7 +223,7 @@ void *pam_thread(void *parg)
                   if (retval == PAM_SUCCESS) {
                     /* do promotion to session start */
                     ptr_xauth->ptarg.pam_state = PAM_AUTH_SUCCESS;
-                    ptr_xauth->ptarg.pam_do_state = PAM_SESSION_START;
+                    ptr_xauth->ptarg.pam_do_state = PAM_CALLBACK;
 
                     break; //  break out of pam_acct_mgmt loop
 
@@ -255,41 +255,52 @@ void *pam_thread(void *parg)
         }
 
       }
+    } else if(ptr_xauth->ptarg.pam_do_state == PAM_CALLBACK) {
+        log_pam_step((struct pam_thread_arg *)&ptr_xauth->ptarg, "making xauth callback");
 
-    } else if(ptr_xauth->ptarg.pam_do_state == PAM_SESSION_START) {
+        struct state *st = state_with_serialno(ptr_xauth->serialno);
+        if(st != NULL) {
+          so_serial_t old_state = push_cur_state(st);
 
-      for (int i = 0; i < 5; i++) {
-        what = "pam_open_session";
-        retval = pam_open_session(pamh, PAM_SILENT);
-        log_pam_step((struct pam_thread_arg *)&ptr_xauth->ptarg, what);
-        if (retval == PAM_SUCCESS) {
+          libreswan_log("XAUTH: #%lu: completed for user '%s' (waiting for VPN up for session_start)",
+                        ptr_xauth->ptarg.st_serialno, ptr_xauth->ptarg.name);
 
-          bool success = TRUE;
-          struct state *st = state_with_serialno(ptr_xauth->serialno);
-          //passert(st != NULL);
-          if(st != NULL) {
-            so_serial_t old_state = push_cur_state(st);
-
-            libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_open_session",
-                          ptr_xauth->ptarg.st_serialno, ptr_xauth->ptarg.name,
-                          success ? "SUCCESSS" : "FAILURE");
-
-            ptr_xauth->callback(st, ptr_xauth->ptarg.name, success);
-            pop_cur_state(old_state);
-          }
-
-          ptr_xauth->ptarg.pam_state = PAM_SESSION_START_SUCCESS;
-          ptr_xauth->ptarg.pam_do_state = PAM_DO_NOTHING;
-
-          break;
-        } else {
-          ptr_xauth->ptarg.pam_state = PAM_SESSION_START_FAIL;
-          ptr_xauth->ptarg.pam_do_state = PAM_TERM;
+          ptr_xauth->callback(st, ptr_xauth->ptarg.name, TRUE);
+          pop_cur_state(old_state);
         }
+        ptr_xauth->ptarg.pam_do_state = PAM_SESSION_START;
+    } else if(ptr_xauth->ptarg.pam_do_state == PAM_SESSION_START) {
+      if (atomic_flag_test_and_set(&ptr_xauth->vpn_still_starting)) {
+        log_pam_step(&ptr_xauth->ptarg, "waiting for VPN up");
+      } else {
+        for (int i = 0; i < 5; i++) {
+          what = "pam_open_session";
+          retval = pam_open_session(pamh, PAM_SILENT);
+          log_pam_step((struct pam_thread_arg *)&ptr_xauth->ptarg, what);
+          if (retval == PAM_SUCCESS) {
+
+            bool success = TRUE;
+            struct state *st = state_with_serialno(ptr_xauth->serialno);
+            //passert(st != NULL);
+            if(st != NULL) {
+              libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_open_session",
+                            ptr_xauth->ptarg.st_serialno, ptr_xauth->ptarg.name,
+                            success ? "SUCCESSS" : "FAILURE");
+
+            }
+
+            ptr_xauth->ptarg.pam_state = PAM_SESSION_START_SUCCESS;
+            ptr_xauth->ptarg.pam_do_state = PAM_DO_NOTHING;
+
+            break;
+          } else {
+            ptr_xauth->ptarg.pam_state = PAM_SESSION_START_FAIL;
+            ptr_xauth->ptarg.pam_do_state = PAM_TERM;
+            /* FIXME: Need to kill the VPN here */
+          }
+        }
+        /* Failed pam_open_session */
       }
-      /* Failed pam_open_session */
-
-
     } else if(ptr_xauth->ptarg.pam_do_state == PAM_SESSION_END) {
 
       for (int i = 0; i < 5; i++) {

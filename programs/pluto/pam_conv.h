@@ -19,6 +19,7 @@
 
 //#include "xauth.h"
 #include "constants.h"
+#include <stdatomic.h>
 struct state;
 
 typedef void xauth_callback_t(
@@ -30,11 +31,12 @@ struct app_pam_data { const char* password; };
 
 enum pam_state_t {
     PAM_AUTH = 0,
-    PAM_SESSION_START = 1,
-    PAM_SESSION_END = 2,
-    PAM_TERM = 3,
-    PAM_STATE_UNKNOWN = 4,
-    PAM_DO_NOTHING = 5
+    PAM_CALLBACK = 1,
+    PAM_SESSION_START = 2,
+    PAM_SESSION_END = 3,
+    PAM_TERM = 4,
+    PAM_STATE_UNKNOWN = 5,
+    PAM_DO_NOTHING = 6
 
 };
 
@@ -75,6 +77,7 @@ struct xauth {
 	xauth_callback_t *callback;
 	bool abort;
 	pid_t child;
+	atomic_flag vpn_still_starting;
 };
 
 extern bool do_pam_authentication(struct pam_thread_arg *arg);

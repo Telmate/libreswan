@@ -52,6 +52,7 @@ void xauth_start_pam_thread(struct state *st,
 
 	xauth->callback = callback;
 	xauth->serialno = serialno;
+	atomic_flag_test_and_set(&xauth->vpn_still_starting);
 	gettimeofday(&xauth->tv0, NULL);
 
 	/* fill in pam_thread_arg with info for the child process */
