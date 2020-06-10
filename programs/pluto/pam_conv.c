@@ -30,6 +30,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <security/pam_appl.h> /* needed for pam_handle_t */
+#include <spawn.h>
 
 #include "defs.h"
 #include "lswlog.h"
@@ -41,6 +42,7 @@
 #include "log.h"
 #include "state.h"
 
+extern char **environ; /* because apparently not _GNU_SOURCE */
 
 static char *pam_state_enum[] = {
     "PAM_AUTH", "PAM_CALLBACK", "PAM_SESSION_START", "PAM_SESSION_END", "PAM_TERM", "PAM_STATE_UNKNOWN", "PAM_DO_NOTHING"
@@ -273,31 +275,53 @@ void *pam_thread(void *parg)
       if (atomic_flag_test_and_set(&ptr_xauth->vpn_still_starting)) {
         log_pam_step(&ptr_xauth->ptarg, "waiting for VPN up");
       } else {
-        for (int i = 0; i < 5; i++) {
-          what = "pam_open_session";
-          retval = pam_open_session(pamh, PAM_SILENT);
-          log_pam_step((struct pam_thread_arg *)&ptr_xauth->ptarg, what);
-          if (retval == PAM_SUCCESS) {
+        what = "pam_open_session";
+        retval = pam_open_session(pamh, PAM_SILENT);
+        log_pam_step((struct pam_thread_arg *)&ptr_xauth->ptarg, what);
 
-            bool success = TRUE;
-            struct state *st = state_with_serialno(ptr_xauth->serialno);
-            //passert(st != NULL);
-            if(st != NULL) {
-              libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_open_session",
-                            ptr_xauth->ptarg.st_serialno, ptr_xauth->ptarg.name,
-                            success ? "SUCCESSS" : "FAILURE");
+        struct state *st = state_with_serialno(ptr_xauth->serialno);
+        if (!st) {
+          /* should never happen, just log if it does */
+          libreswan_log("XAUTH: #%lu: INTERNAL ERROR Could not find SA state object for user '%s' ::: pam_open_session",
+                        ptr_xauth->ptarg.st_serialno, ptr_xauth->ptarg.name);
+        }
+        libreswan_log("XAUTH: #%lu: completed for user '%s' with status %s ::: pam_open_session",
+                      ptr_xauth->ptarg.st_serialno, ptr_xauth->ptarg.name,
+                      (retval == PAM_SUCCESS ? "SUCCESS" : "FAILURE"));
 
-            }
+        if (retval == PAM_SUCCESS) {
+          ptr_xauth->ptarg.pam_state = PAM_SESSION_START_SUCCESS;
+          ptr_xauth->ptarg.pam_do_state = PAM_DO_NOTHING;
+        } else {
+          ptr_xauth->ptarg.pam_state = PAM_SESSION_START_FAIL;
+          ptr_xauth->ptarg.pam_do_state = PAM_TERM;
 
-            ptr_xauth->ptarg.pam_state = PAM_SESSION_START_SUCCESS;
-            ptr_xauth->ptarg.pam_do_state = PAM_DO_NOTHING;
-
-            break;
-          } else {
-            ptr_xauth->ptarg.pam_state = PAM_SESSION_START_FAIL;
-            ptr_xauth->ptarg.pam_do_state = PAM_TERM;
-            /* FIXME: Need to kill the VPN here */
+          /*
+           * Ideally, sending the message would be a library, but it's
+           * not... so only way to re-use that code is to just call ipsec
+           * whack. Hopefully posix_spawn avoids the pthread/fork issues.
+          */
+          pid_t child;
+          int res;
+          char buf[32]; /* 2^64-1 needs 21 */
+          res = snprintf(buf, sizeof(buf), "%lu", ptr_xauth->serialno);
+          if (res < 0 || (unsigned int)res >= sizeof(buf)) {
+            libreswan_log("XAUTH: #%lu: snprintf failure while downing VPN for user '%s'",
+                          ptr_xauth->ptarg.st_serialno, ptr_xauth->ptarg.name);
+            continue;
           }
+          char *args[] = {
+              "ipsec", "whack", "--deletestate", buf, NULL
+          };
+          int err = posix_spawnp(&child, "ipsec", NULL, NULL, args, environ);
+          if (err) {
+            libreswan_log("XAUTH: #%lu: posix_spawnp failure while downing VPN for user '%s'",
+                          ptr_xauth->ptarg.st_serialno, ptr_xauth->ptarg.name);
+            continue;
+          }
+
+          libreswan_log("XAUTH: #%lu: sent VPN down command for user '%s'",
+                        ptr_xauth->ptarg.st_serialno, ptr_xauth->ptarg.name);
         }
         /* Failed pam_open_session */
       }
