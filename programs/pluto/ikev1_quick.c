@@ -83,6 +83,8 @@
 #include "alg_info.h"
 #include "ip_address.h"
 
+#include "pam_conv.h" /* needs struct xauth */
+
 #include <blapit.h>
 
 /* accept_PFS_KE
@@ -1986,6 +1988,19 @@ stf_status quick_inI2(struct state *st, struct msg_digest *md)
 			return STF_FAIL;
 		}
 	}
+
+	/*
+	 * Tell the xauth thread it's finally time to start the session for
+	 * e.g., billing. We need to find the phase1 state, though, since
+	 * that's where the xauth is.
+	*/
+    struct state *p1st = state_with_serialno(st->st_clonedfrom);
+    if (!p1st || !p1st->st_xauth) {
+			delete_ipsec_sa(st);
+			return STF_FAIL;
+
+	}
+	atomic_flag_clear(&p1st->st_xauth->vpn_still_starting);
 
 	return STF_OK;
 }
