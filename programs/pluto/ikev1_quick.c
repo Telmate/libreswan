@@ -1995,12 +1995,25 @@ stf_status quick_inI2(struct state *st, struct msg_digest *md)
 	 * that's where the xauth is.
 	*/
     struct state *p1st = state_with_serialno(st->st_clonedfrom);
-    if (!p1st || !p1st->st_xauth) {
+    if (p1st) {
+		if (p1st->st_xauth) {
+			atomic_flag_clear(&p1st->st_xauth->vpn_still_starting);
+			return STF_OK;
+		} else if (XAUTHBY_PAM != st->st_connection->xauthby) {
+			/* not using PAM, should not be a thread for it */
+			return STF_OK;
+		} else {
+			loglog(RC_LOG_SERIOUS, "Expected xauth thread but found none; downing connection");
 			delete_ipsec_sa(st);
+			/* would be nice to call delete_state(p1st) to stop phase1
+			 * as well, but that frees a lot of memory and not sure it
+			 * isn't still used up our call chain. Not worrying too much
+			 * as this should never happen. */
 			return STF_FAIL;
-
+		}
+	} else {
+		loglog(RC_LOG_SERIOUS, "Couldn't find phase one, should not be possible, downing phase2");
+		delete_ipsec_sa(st);
+		return STF_FAIL;
 	}
-	atomic_flag_clear(&p1st->st_xauth->vpn_still_starting);
-
-	return STF_OK;
 }
