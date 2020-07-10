@@ -543,7 +543,7 @@ static const struct state_v1_microcode v1_state_microcode_table[] = {
 	{ STATE_MODE_CFG_R0, STATE_MODE_CFG_R1,
 	  SMF_ALL_AUTH | SMF_ENCRYPTED | SMF_REPLY,
 	  P(MCFG_ATTR) | P(HASH), P(VID),
-	  EVENT_SA_REPLACE, modecfg_inR0 },
+	  EVENT_v1_RETRANSMIT, modecfg_inR0 },
 
 	{ STATE_MODE_CFG_R1, STATE_MODE_CFG_R2,
 	  SMF_ALL_AUTH | SMF_ENCRYPTED | SMF_RETRANSMIT_ON_DUPLICATE,
