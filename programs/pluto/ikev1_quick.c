@@ -1370,6 +1370,24 @@ static stf_status quick_inI1_outR1_authtail(struct verify_oppo_bundle *b)
 	    (hv.st_nat_traversal & NAT_T_WITH_NATOA))
 		nat_traversal_natoa_lookup(md, &hv);
 
+	if (p1st->st_event && EVENT_v1_RETRANSMIT == p1st->st_event->ev_type) {
+		/* KLUGE: To work around the tablet nots retransmitting their
+		 *        ModeCfg IP request, enabled retransmits on
+		 *        STATE_MODE_CFG_R0. However, after that retransmit...
+		 *        we get forcefully transitioned to STATE_QUICK_R0 and
+		 *        suspend the phase1, so the retransmit timer never gets
+		 *        cleared. So we clear it here. Otherwise it'll keep
+		 *        retransmitting, time out, and fairly soon down the
+		 *        connection.
+		 *
+		 * FIXME: But nothing sets back the EVENT_SA_REPLACE timer...
+		 *        which is normally done in ikev1.c:2467 ("case
+		 *        EVENT_SA_REPLACE:"). Not sure how much it matters,
+		 *        since the p2 state gets that event too.
+		*/
+		delete_event(p1st);
+	}
+
 	/* now that we are sure of our connection, create our new state */
 	{
 		struct state *const st = duplicate_state(p1st, IPSEC_SA);
