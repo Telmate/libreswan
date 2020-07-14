@@ -543,10 +543,10 @@ static const struct state_v1_microcode v1_state_microcode_table[] = {
 	{ STATE_MODE_CFG_R0, STATE_MODE_CFG_R1,
 	  SMF_ALL_AUTH | SMF_ENCRYPTED | SMF_REPLY,
 	  P(MCFG_ATTR) | P(HASH), P(VID),
-	  EVENT_SA_REPLACE, modecfg_inR0 },
+	  EVENT_v1_RETRANSMIT, modecfg_inR0 },
 
 	{ STATE_MODE_CFG_R1, STATE_MODE_CFG_R2,
-	  SMF_ALL_AUTH | SMF_ENCRYPTED,
+	  SMF_ALL_AUTH | SMF_ENCRYPTED | SMF_RETRANSMIT_ON_DUPLICATE,
 	  P(MCFG_ATTR) | P(HASH), P(VID),
 	  EVENT_SA_REPLACE, modecfg_inR1 },
 
@@ -1434,6 +1434,10 @@ void process_v1_packet(struct msg_digest **mdp)
 					    enum_name(&state_names,
 						      st->st_state
 						      )));
+			} else if (st->st_connection->spd.this.modecfg_server
+				   && STATE_MODE_CFG_R1 == st->st_state) {
+				from_state = STATE_MODE_CFG_R1;
+				plog("already in STATE_MODE_CFG_R1, probably a retransmit");
 			} else if (st->st_connection->spd.this.modecfg_client
 				   &&
 				   IS_PHASE1(st->st_state)) {
