@@ -1,3 +1,7 @@
+# Changes
+This is trivial modifications to allow using the xauth password field to
+instead pass a session key.
+
 # Libreswan
 The Libreswan Project   https://libreswan.org/
 
