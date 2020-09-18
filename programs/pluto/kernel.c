@@ -513,6 +513,12 @@ static void jam_common_shell_out(jambuf_t *buf, const struct connection *c,
 		jam(buf, "' ");
 	}
 
+	if (st != NULL && st->st_xauth_tms_session[0] != '\0') {
+		jam(buf, "TELMATE_SESSION_KEY='");
+		jam_clean_xauth_username(buf, st->st_xauth_tms_session);
+		jam(buf, "' ");
+	}
+
 	if (address_is_specified(&sr->this.host_srcip)) {
 		jam(buf, "PLUTO_MY_SOURCEIP='");
 		jam_address(buf, &sr->this.host_srcip);

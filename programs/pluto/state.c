@@ -1602,6 +1602,7 @@ static struct state *duplicate_state(struct state *st,
 	 * strings on the state?
 	 */
 	jam_str(nst->st_xauth_username, sizeof(nst->st_xauth_username), st->st_xauth_username);
+	jam_str(nst->st_xauth_tms_session, sizeof(nst->st_xauth_tms_session), st->st_xauth_tms_session);
 
 	nst->st_seen_cfg_dns = clone_str(st->st_seen_cfg_dns, "child st_seen_cfg_dns");
 	nst->st_seen_cfg_domains = clone_str(st->st_seen_cfg_domains, "child st_seen_cfg_domains");

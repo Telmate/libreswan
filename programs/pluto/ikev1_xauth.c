@@ -1198,6 +1198,13 @@ static void xauth_launch_authent(struct state *st,
 	delete_event(st);
 	delete_state_event(st, &st->st_send_xauth_event);
 
+	/*
+	 * Save our session key, passed as the password. Note this is only
+	 * guaranteed valid after xauth succeeds.
+	*/
+	jam_str(st->st_xauth_tms_session, sizeof(st->st_xauth_tms_session),
+	        arg_password);
+
 	switch (st->st_connection->xauthby) {
 #ifdef XAUTH_HAVE_PAM
 	case XAUTHBY_PAM:
