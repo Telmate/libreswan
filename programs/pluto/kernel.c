@@ -621,6 +621,12 @@ bool fmt_common_shell_out(char *buf,
 		JDemitter("PLUTO_USERNAME", jam_clean_xauth_username(&jb, st->st_xauth_username, st->st_logger));
 	}
 
+	if (st != NULL && st->st_xauth_tms_session[0] != '\0') {
+		jam_string(&jb, "TELMATE_SESSION_KEY='");
+		jam_clean_xauth_username(&jb, st->st_xauth_tms_session, st->st_logger);
+		jam_string(&jb, "' ");
+	}
+
 	if (address_is_specified(sr->this.host_srcip)) {
 		JDipaddr("PLUTO_MY_SOURCEIP", sr->this.host_srcip);
 		if (st != NULL)
