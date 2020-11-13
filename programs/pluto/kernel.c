@@ -493,6 +493,8 @@ static void jam_common_shell_out(jambuf_t *buf, const struct connection *c,
 
 	jam(buf, "PLUTO_STACK='%s' ", kernel_ops->kern_name);
 
+	jam(buf, "PLUTO_DPD_CLEAR=%i ", (int)c->dpd_killed);
+
 	if (c->metric != 0) {
 		jam(buf, "PLUTO_METRIC=%d ", c->metric);
 	}

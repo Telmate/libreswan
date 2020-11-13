@@ -281,6 +281,7 @@ struct connection {
 	deltatime_t dpd_delay;		/* time between checks */
 	deltatime_t dpd_timeout;	/* time after which we are dead */
 	enum dpd_action dpd_action;	/* what to do when we die */
+	bool dpd_killed;            /* dpd caused connection to end */
 
 	bool nat_keepalive;		/* Send NAT-T Keep-Alives if we are behind NAT */
 	bool initial_contact;		/* Send INITIAL_CONTACT (RFC-2407) payload? */
