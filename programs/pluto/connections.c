@@ -2003,6 +2003,7 @@ struct connection *instantiate(struct connection *c, const ip_address *him,
 	d->newest_isakmp_sa = SOS_NOBODY;
 	d->newest_ipsec_sa = SOS_NOBODY;
 	d->spd.eroute_owner = SOS_NOBODY;
+	d->dpd_killed = FALSE;
 
 	/* reset log file info */
 	d->log_file_name = NULL;
@@ -4201,6 +4202,7 @@ void liveness_action(struct connection *c, enum ike_version ike_version)
 	case DPD_ACTION_CLEAR:
 		libreswan_log("%s action - clearing connection kind %s", ikev,
 				enum_name(&connection_kind_names, c->kind));
+		c->dpd_killed = TRUE;
 		liveness_clear_connection(c, ikev);
 		break;
 
