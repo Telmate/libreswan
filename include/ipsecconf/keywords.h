@@ -197,8 +197,9 @@ enum keyword_numeric_conn_field {
 	KNCF_IKEPORT,		/* left/right: IKE Port that must be used */
 	KNCF_AUTH,	/* left/right */
 	KNCF_EAP,	/* left/right */
+	KNCF_DELAYLEASEREUSE, /* left/right */
 
-		KNCF_last_leftright = KNCF_EAP,
+		KNCF_last_leftright = KNCF_DELAYLEASEREUSE,
 
 	KNCF_FIREWALL,
 	KNCF_IDTYPE,

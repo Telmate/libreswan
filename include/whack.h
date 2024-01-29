@@ -107,6 +107,7 @@ struct whack_end {
 	char *updown;		/* string */
 	char *virt;
 	ip_range pool_range;	/* store start of v4 addresspool */
+	unsigned delay_lease_reuse; /* how long to delay pool lease re-use for */
 	bool xauth_server;	/* for XAUTH */
 	bool xauth_client;
 	char *xauth_username;

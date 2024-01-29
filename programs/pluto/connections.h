@@ -515,6 +515,7 @@ struct connection {
 	enum send_ca_policy send_ca;
 
 	struct addresspool *pool; /* IPv4 addresspool as a range, start end */
+	unsigned delay_lease_reuse; /* seconds to delay reusing leased IPs */
 
 	uint32_t metric;	/* metric for tunnel routes */
 	uint16_t connmtu;	/* mtu for tunnel routes */

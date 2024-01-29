@@ -443,6 +443,7 @@ const struct keyword_def ipsec_conf_keywords[] = {
   { "xauthclient",  kv_conn | kv_leftright,  kt_bool,  KNCF_XAUTHCLIENT, NULL, NULL, },
   { "modecfgserver",  kv_conn | kv_leftright,  kt_bool,  KNCF_MODECONFIGSERVER, NULL, NULL, },
   { "modecfgclient",  kv_conn | kv_leftright,  kt_bool,  KNCF_MODECONFIGCLIENT, NULL, NULL, },
+  { "delayleasereuse",  kv_conn | kv_leftright,  kt_number,  KNCF_DELAYLEASEREUSE, NULL, NULL, },
   { "username",  kv_conn | kv_leftright,  kt_string,  KSCF_USERNAME, NULL, NULL, },
   /* xauthusername is still used in NetworkManager-libreswan :/ */
   { "xauthusername",  kv_conn | kv_leftright,  kt_string,  KSCF_USERNAME, NULL, NULL, }, /* old alias */
