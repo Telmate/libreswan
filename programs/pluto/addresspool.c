@@ -35,6 +35,7 @@
 #include "constants.h"
 #include "addresspool.h"
 #include "monotime.h"
+#include "deltatime.h"
 #include "ip_address.h"
 #include "ip_range.h"
 #include "log.h"
@@ -177,9 +178,11 @@ struct lease {
 	co_serial_t assigned_to; /* ALWAYS 1:1 */
 
 	struct entry free_entry;
+	struct entry delay_entry;
 	struct entry reusable_entry;
 
 	char *reusable_name;
+	monotime_t reusable_at;
 	struct list reusable_bucket;
 };
 
@@ -190,6 +193,7 @@ struct addresspool {
 
 	unsigned nr_reusable;
 	struct list free_list;
+	struct list delay_list;
 	unsigned nr_in_use;	/* active */
 	/* --- .free.nr + .nr_in_use --- */
 	unsigned nr_leases;	/* nr elements in leases array */
@@ -264,9 +268,9 @@ static void DBG_pool(bool verbose, const struct addresspool *pool,
 		jam_va_list(buf, format, args);
 		va_end(args);
 		if (verbose) {
-			jam(buf, "; pool-refcount %u size %u leases %u in-use %u free %u reusable %u",
+			jam(buf, "; pool-refcount %u size %u leases %u in-use %u free %u delay %u reusable %u",
 			    refcnt_peek(&pool->refcnt), pool->size, pool->nr_leases,
-			    pool->nr_in_use, pool->free_list.nr, pool->nr_reusable);
+			    pool->nr_in_use, pool->free_list.nr, pool->delay_list.nr, pool->nr_reusable);
 		}
 	}
 }
@@ -291,15 +295,17 @@ static void DBG_lease(bool verbose, const struct addresspool *pool, const struct
 		} else {
 			jam(buf, " unassigned");
 		}
+		jam(buf, " re-use ");
+		jam_monotime(buf, lease->reusable_at);
 		jam(buf, ": ");
 		va_list args;
 		va_start(args, format);
 		jam_va_list(buf, format, args);
 		va_end(args);
 		if (verbose) {
-			jam(buf, "; leases %u in-use %u free %u reusable %u",
+			jam(buf, "; leases %u in-use %u free %u delay %u reusable %u",
 			    pool->nr_leases, pool->nr_in_use,
-			    pool->free_list.nr, pool->nr_reusable);
+			    pool->free_list.nr, pool->delay_list.nr, pool->nr_reusable);
 		}
 	}
 }
@@ -460,6 +466,16 @@ void free_that_address_lease(struct connection *c)
 			DBG_lease(true, pool, lease, "lingering reusable lease '%s' for connection "PRI_CONNECTION,
 				  lease->reusable_name, pri_connection(c, &cb));
 		}
+	} else if (c->delay_lease_reuse) {
+		/* do not immediately re-use */
+		lease->reusable_at = monotime_add(mononow(), deltatime(c->delay_lease_reuse));
+		APPEND(pool, delay_list, delay_entry, lease);
+		pool->nr_in_use--;
+		if (DBGP(DBG_BASE)) {
+			connection_buf cb;
+			DBG_lease(true, pool, lease, "delaying re-use of lease for connection "PRI_CONNECTION,
+				  pri_connection(c, &cb));
+		}
 	} else {
 		/* cannot share: free it */
 		PREPEND(pool, free_list, free_entry, lease);
@@ -570,6 +586,24 @@ err_t lease_that_address(struct connection *c, const struct state *st)
 	}
 	if (new_lease == NULL) {
 		if (IS_EMPTY(pool, free_list)) {
+			if (!IS_EMPTY(pool, delay_list)) {
+				/* check to see it's been long enough to re-use a
+				 * delayed lease */
+				struct lease *delayed_lease;
+				DBG_pool(false, pool, "checking if first delayed use is re-usable");
+				delayed_lease = HEAD(pool, delay_list, delay_entry);
+				DBG_lease(true, pool, delayed_lease, "checking this lease");
+				if (monobefore(delayed_lease->reusable_at, mononow())) {
+					new_lease = delayed_lease;
+					DBG_lease(false, pool, delayed_lease, "check passed; re-using");
+					REMOVE(pool, delay_list, delay_entry, new_lease);
+				} else {
+					DBG_lease(false, pool, delayed_lease, "still too new; not re-using");
+				}
+			}
+		}
+
+		if (new_lease == NULL && IS_EMPTY(pool, free_list)) {
 			/* try to grow the address pool */
 			if (pool->nr_leases >= pool->size) {
 				if (DBGP(DBG_BASE)) {
@@ -597,6 +631,7 @@ err_t lease_that_address(struct connection *c, const struct state *st)
 				 */
 				*lease = (struct lease) {
 					.free_entry = empty_entry,
+					.delay_entry = empty_entry,
 					.reusable_entry = empty_entry,
 					.reusable_bucket = empty_list,
 				};
@@ -617,9 +652,11 @@ err_t lease_that_address(struct connection *c, const struct state *st)
 				}
 			}
 		}
-		new_lease = HEAD(pool, free_list, free_entry);
-		passert(new_lease != NULL);
-		REMOVE(pool, free_list, free_entry, new_lease);
+		if (new_lease == NULL) {
+			new_lease = HEAD(pool, free_list, free_entry);
+			passert(new_lease != NULL);
+			REMOVE(pool, free_list, free_entry, new_lease);
+		}
 		pool->nr_in_use++;
 		if (new_lease->reusable_name != NULL) {
 			/* oops; takeing over this lingering lease */
@@ -796,6 +833,7 @@ diag_t install_addresspool(const ip_range pool_range, struct connection *c)
 	new_pool->nr_in_use = 0;
 	new_pool->nr_leases = 0;
 	new_pool->free_list = empty_list;
+	new_pool->delay_list = empty_list;
 	new_pool->leases = NULL;
 
 	/* insert at front */

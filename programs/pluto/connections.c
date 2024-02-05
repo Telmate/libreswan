@@ -1382,6 +1382,9 @@ static int extract_end(struct connection *c,
 		}
 		other_end->modecfg_server = true;
 		dst->modecfg_client = true;
+		llog(RC_LOG, c->logger, "delay lease re-use: %u", 
+		     (unsigned)src->delay_lease_reuse);
+		c->delay_lease_reuse = src->delay_lease_reuse;
 	}
 
 	return same_ca;

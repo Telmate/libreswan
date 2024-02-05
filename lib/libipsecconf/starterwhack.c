@@ -407,6 +407,8 @@ static bool set_whack_end(struct whack_end *w,
 		w->modecfg_server = l->options[KNCF_MODECONFIGSERVER];
 	if (l->options_set[KNCF_MODECONFIGCLIENT])
 		w->modecfg_client = l->options[KNCF_MODECONFIGCLIENT];
+	if (l->options_set[KNCF_DELAYLEASEREUSE])
+		w->delay_lease_reuse = l->options[KNCF_DELAYLEASEREUSE];
 	if (l->options_set[KNCF_CAT])
 		w->cat = l->options[KNCF_CAT];
 	w->pool_range = l->pool_range;
