@@ -69,6 +69,7 @@ static void dpd_clear_connection(struct connection *c)
 	 * Note that delete_states_by_connection changes c->kind but we need
 	 * to remember what it was to know if we still need to unroute after delete
 	 */
+	c->dpd_killed = true;
 	flush_pending_by_connection(c); /* remove any partial negotiations that are failing */
 	delete_v1_states_by_connection_family(&c);	/* may change c to NULL */
 	/*

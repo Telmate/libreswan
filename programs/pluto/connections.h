@@ -503,6 +503,8 @@ struct connection {
 		newest_ike_sa,
 		newest_ipsec_sa;
 
+	bool dpd_killed;
+
 	lmod_t extra_debugging;
 
 	/* if multiple policies, next one to apply */
