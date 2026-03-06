@@ -603,6 +603,8 @@ bool fmt_common_shell_out(char *buf,
 
 	JDstr("PLUTO_STACK", kernel_ops->updown_name);
 
+	JDuint("PLUTO_DPD_CLEAR", (unsigned int)c->dpd_killed);
+
 	if (c->metric != 0) {
 		jam(&jb, "PLUTO_METRIC=%d ", c->metric);
 	}

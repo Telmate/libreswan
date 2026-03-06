@@ -2738,6 +2738,7 @@ struct connection *instantiate(struct connection *c,
 
 	d->newest_ike_sa = SOS_NOBODY;
 	d->newest_ipsec_sa = SOS_NOBODY;
+	d->dpd_killed = false;
 
 
 	/* reset log file info */
